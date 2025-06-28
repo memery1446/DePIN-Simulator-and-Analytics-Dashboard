@@ -1,16 +1,32 @@
 import { ethers } from "hardhat";
 
 async function main() {
-    const initialSupply = ethers.parseEther("1000000"); // Ethers v6 format
-    const DPN = await ethers.getContractFactory("DPNToken");
-    const dpn = await DPN.deploy(initialSupply); // returns a contract instance
+    const [deployer] = await ethers.getSigners();
+    console.log("Deploying contracts with:", deployer.address);
 
-    await dpn.waitForDeployment(); // Ethers v6 replacement for .deployed()
+    const initialSupply = ethers.parseEther("1000000");
 
-    console.log("DPN Token deployed to:", await dpn.getAddress());
+    // Deploy DPNToken
+    const DPNToken = await ethers.getContractFactory("DPNToken");
+    const dpn = await DPNToken.deploy(initialSupply);
+    await dpn.waitForDeployment();
+    console.log("✅ DPN Token deployed to:", await dpn.getAddress());
+
+    // Deploy NodeRegistry
+    const NodeRegistry = await ethers.getContractFactory("NodeRegistry");
+    const nodeRegistry = await NodeRegistry.deploy();
+    await nodeRegistry.waitForDeployment();
+    console.log("✅ NodeRegistry deployed to:", await nodeRegistry.getAddress());
+
+    // Deploy Participation (inherits NodeRegistry)
+    const Participation = await ethers.getContractFactory("Participation");
+    const participation = await Participation.deploy();
+    await participation.waitForDeployment();
+    console.log("✅ Participation contract deployed to:", await participation.getAddress());
 }
 
 main().catch((error) => {
     console.error(error);
     process.exitCode = 1;
 });
+

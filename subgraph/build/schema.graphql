@@ -1,0 +1,29 @@
+type Node @entity(immutable: false) {
+  id: Bytes!
+  nodeId: BigInt!
+  owner: Bytes!
+  timestamp: BigInt!
+}
+
+type Reward @entity(immutable: false) {
+  id: Bytes!
+  nodeId: BigInt!
+  owner: Bytes!
+  amount: BigInt!
+  timestamp: BigInt!
+}
+
+type Stake @entity(immutable: false) {
+  id: Bytes!
+  nodeId: BigInt!
+  staker: Bytes!
+  amount: BigInt!
+  timestamp: BigInt!
+}
+
+type Uptime @entity(immutable: false) {
+  id: Bytes!
+  nodeId: BigInt!
+  minutesUp: BigInt!
+  timestamp: BigInt!
+}

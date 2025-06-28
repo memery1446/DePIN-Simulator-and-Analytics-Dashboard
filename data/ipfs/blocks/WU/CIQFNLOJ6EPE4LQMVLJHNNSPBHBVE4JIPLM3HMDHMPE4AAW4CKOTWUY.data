@@ -1,0 +1,38 @@
+
+è	á	dataSources:
+  - kind: ethereum/contract
+    mapping:
+      abis:
+        - file:
+            /: /ipfs/QmaM9GGcHZ9ewZNuBxhL4xnGPHsmddEEJJsUUVEptBAKhe
+          name: Participation
+      apiVersion: 0.0.6
+      entities:
+        - Node
+        - Reward
+        - Stake
+        - Uptime
+      eventHandlers:
+        - event: NodeRegistered(indexed uint256,indexed address,uint256)
+          handler: handleNodeRegistered
+        - event: RewardClaimed(indexed uint256,indexed address,uint256,uint256)
+          handler: handleRewardClaimed
+        - event: StakeUpdated(indexed uint256,indexed address,uint256,uint256)
+          handler: handleStakeUpdated
+        - event: UptimeRecorded(indexed uint256,uint256,uint256)
+          handler: handleUptimeRecorded
+      file:
+        /: /ipfs/QmR99Ttbki2hhsL8HDUqBypF9ddAEFqYswd2F5AFCDfRmc
+      kind: ethereum/events
+      language: wasm/assemblyscript
+    name: Participation
+    network: localhost
+    source:
+      abi: Participation
+      address: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6'
+      startBlock: 0
+schema:
+  file:
+    /: /ipfs/QmebpZ9dCiSmv83haJsmRqAt11k1jxmgZxmbdsJ9SY6Yw1
+specVersion: 0.0.4
+á	
