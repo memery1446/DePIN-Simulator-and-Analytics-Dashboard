@@ -39,4 +39,15 @@ app.post('/stake', (req, res) => {
     res.json({ success: true, message: `Staked ${amount} to node ${nodeId}` });
 });
 
+app.get('/rewards', (req, res) => {
+    res.json([
+        { nodeId: 0, timestamp: 1719000000, reward: 10 },
+        { nodeId: 0, timestamp: 1719003600, reward: 12 },
+        { nodeId: 0, timestamp: 1719007200, reward: 15 },
+        { nodeId: 1, timestamp: 1719000000, reward: 5 },
+        { nodeId: 1, timestamp: 1719003600, reward: 8 },
+        { nodeId: 1, timestamp: 1719007200, reward: 9 }
+    ]);
+});
+
 

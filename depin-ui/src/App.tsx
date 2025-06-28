@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import NodeList from './components/NodeList';
 import StakingPanel from './components/StakingPanel';
+import RewardChart from './components/RewardChart';
 
 
 const App = () => {
@@ -44,6 +45,8 @@ const App = () => {
 
             <NodeList />
             <StakingPanel />
+            <RewardChart />
+
 
         </div>
     );
