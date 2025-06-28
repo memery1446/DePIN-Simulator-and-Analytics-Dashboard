@@ -1,5 +1,8 @@
 // App.tsx
 import React, { useEffect, useState } from 'react';
+import NodeList from './components/NodeList';
+import StakingPanel from './components/StakingPanel';
+
 
 const App = () => {
     const [blockNumber, setBlockNumber] = useState<string | null>(null);
@@ -38,8 +41,13 @@ const App = () => {
             <h1>DePIN Simulator</h1>
             {blockNumber && <p>Current Block: {blockNumber}</p>}
             {error && <p style={{ color: 'red' }}>Error: {error}</p>}
+
+            <NodeList />
+            <StakingPanel />
+
         </div>
     );
+
 };
 
 export default App;

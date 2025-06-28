@@ -25,3 +25,18 @@ app.listen(PORT, () => {
     console.log(`🚀 RPC relay running at http://localhost:${PORT}/rpc`);
 });
 
+app.get('/nodes', (req, res) => {
+    res.json([
+        { id: 0, owner: "0x1234...abcd", metadata: "Node Alpha", status: "active" },
+        { id: 1, owner: "0x5678...efgh", metadata: "Node Beta", status: "inactive" },
+        { id: 2, owner: "0x9abc...ijkl", metadata: "Node Gamma", status: "active" }
+    ]);
+});
+
+app.post('/stake', (req, res) => {
+    const { nodeId, amount } = req.body;
+    console.log(`🔗 Stake received: ${amount} to node ${nodeId}`);
+    res.json({ success: true, message: `Staked ${amount} to node ${nodeId}` });
+});
+
+
