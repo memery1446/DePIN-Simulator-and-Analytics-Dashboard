@@ -180,6 +180,8 @@ docker-compose logs
 | Port conflicts | Stop other services or change ports in docker-compose.yml |
 
 ## 🔄 **Typical Session Commands**
+
+node rpc-relay.js
 ```bash
 # Terminal 1: Infrastructure
 docker-compose up -d
