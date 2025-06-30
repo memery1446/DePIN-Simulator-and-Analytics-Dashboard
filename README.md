@@ -164,7 +164,7 @@ docker-compose logs
     nodeId
     owner
     amount
-    timestamp
+    timestamp 
   }
 }
 ```
