@@ -195,6 +195,10 @@ npx graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 part
 # Terminal 3: Frontend (optional)
 cd depin-ui
 npm start
+
+# Terminal 4 - Deploy contracts
+npx hardhat run scripts/deploy.ts --network localhost
+
 ```
 
 **🎉 Your DePIN Simulator is ready for dashboard development!**
