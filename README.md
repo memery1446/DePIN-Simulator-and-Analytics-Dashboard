@@ -186,6 +186,7 @@ node rpc-relay.js
 # Terminal 1: Infrastructure
 docker-compose up -d
 npx hardhat node
+node rpc-relay.js
 
 # Terminal 2: Development
 npx hardhat test --network localhost

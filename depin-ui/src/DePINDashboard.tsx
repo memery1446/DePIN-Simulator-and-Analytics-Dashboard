@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, ResponsiveContainer } from 'recharts';
+import StakingPools from './components/StakingPools';
 
 // Add MetaMask types
 declare global {
@@ -37,48 +38,13 @@ const DPN_TOKEN_ABI = [
     "function transfer(address to, uint256 amount) external returns (bool)"
 ];
 
-const STAKING_POOL_ABI = [
-    "function stakeToPool(uint8 tier, uint8 lockPeriod) external payable",
-    "function withdrawStake(uint256 positionId) external",
-    "function claimRewards(uint256 positionId) external",
-    "function claimAllRewards() external",
-    "function getPositionDetails(address user, uint256 positionId) external view returns (tuple(uint8 tier, uint8 lockPeriod, uint256 amount, uint256 shares, uint256 stakedAt, uint256 unlocksAt, uint256 lastRewardClaim, bool isActive), uint256 pendingRewards, uint256 timeToUnlock, bool canWithdraw)",
-    "function getUserPositions(address user) external view returns (tuple(uint8 tier, uint8 lockPeriod, uint256 amount, uint256 shares, uint256 stakedAt, uint256 unlocksAt, uint256 lastRewardClaim, bool isActive)[])",
-    "function getPoolStats(uint8 tier) external view returns (tuple(uint256 minStake, uint256 tierMultiplier, uint256 baseRewardRate, uint256 totalStaked, uint256 totalShares, bool isActive), uint256 activeStakers, uint256 averageStake, uint256 poolUtilization)",
-    "function getGlobalStats() external view returns (uint256 tvl, uint256 totalRewards, uint256 totalStakers, uint256[4] poolDistribution)",
-    "function poolConfigs(uint8 tier) external view returns (uint256 minStake, uint256 tierMultiplier, uint256 baseRewardRate, uint256 totalStaked, uint256 totalShares, bool isActive)",
-    "function userPositionCount(address user) external view returns (uint256)"
-];
-
 const GRAPHQL_ENDPOINT = 'http://localhost:8000/subgraphs/name/participation-subgraph';
 const RPC_ENDPOINT = 'http://localhost:4000/rpc';
-
-// Pool tier names and colors
-const POOL_TIERS = [
-    { name: 'Bronze', icon: '🥉', color: '#CD7F32', minStake: '0.1' },
-    { name: 'Silver', icon: '🥈', color: '#C0C0C0', minStake: '1.0' },
-    { name: 'Gold', icon: '🥇', color: '#FFD700', minStake: '5.0' },
-    { name: 'Diamond', icon: '💎', color: '#B9F2FF', minStake: '20.0' }
-];
-
-const LOCK_PERIODS = [
-    { name: 'No Lock', days: 0, multiplier: '1.0', bonus: '0%' },
-    { name: '30 Days', days: 30, multiplier: '1.1', bonus: '+10%' },
-    { name: '90 Days', days: 90, multiplier: '1.25', bonus: '+25%' },
-    { name: '365 Days', days: 365, multiplier: '1.5', bonus: '+50%' }
-];
 
 // Utility functions
 const formatAddress = (address: string): string => `${address.slice(0, 6)}...${address.slice(-4)}`;
 const formatEth = (wei: string | number): string => (parseFloat(wei.toString()) / 1e18).toFixed(2);
 const formatTime = (timestamp: string): string => new Date(parseInt(timestamp) * 1000).toLocaleString();
-const formatTimeRemaining = (seconds: number): string => {
-    if (seconds <= 0) return 'Unlocked';
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    if (days > 0) return `${days}d ${hours}h`;
-    return `${hours}h`;
-};
 
 const DePINDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'nodes' | 'pools'>('nodes');
@@ -115,19 +81,6 @@ const DePINDashboard: React.FC = () => {
     const [registerModal, setRegisterModal] = useState({ isOpen: false, metadata: '' });
     const [userDpnBalance, setUserDpnBalance] = useState<string>('0');
 
-    // Staking Pool state
-    const [poolStakeModal, setPoolStakeModal] = useState({
-        isOpen: false, tier: 0, lockPeriod: 0, amount: ''
-    });
-    const [userPositions, setUserPositions] = useState<any[]>([]);
-    const [poolStats, setPoolStats] = useState<any[]>([]);
-    const [globalPoolStats, setGlobalPoolStats] = useState({
-        tvl: '0',
-        totalRewards: '0',
-        totalStakers: 0,
-        poolDistribution: [0, 0, 0, 0]
-    });
-
     // Contract interaction functions
     const getContract = (address: string, abi: string[]) => {
         if (!window.ethereum) throw new Error('MetaMask not available');
@@ -151,6 +104,108 @@ const DePINDashboard: React.FC = () => {
     const showNotification = (type: 'success' | 'error', message: string) => {
         setNotification({ type, message });
         setTimeout(() => setNotification(null), 5000);
+    };
+
+    // Existing node functions
+    const stakeForNode = async (nodeId: string, amount: string) => {
+        if (!wallet.isConnected) {
+            showNotification('error', 'Please connect your wallet first');
+            return;
+        }
+
+        try {
+            const contract = getContract(CONTRACT_ADDRESSES.PARTICIPATION, PARTICIPATION_ABI);
+            const amountWei = (window as any).ethers.utils.parseEther(amount);
+
+            const tx = await contract.stakeForNode(nodeId, { value: amountWei });
+            addTransaction(tx.hash, 'stake', { nodeId, amount });
+
+            showNotification('success', `Staking transaction submitted! Hash: ${tx.hash.slice(0, 10)}...`);
+            setStakeModal({ isOpen: false, nodeId: '', amount: '' });
+
+            const receipt = await tx.wait();
+            if (receipt.status === 1) {
+                updateTransaction(tx.hash, 'confirmed');
+                showNotification('success', `Successfully staked ${amount} ETH on Node ${nodeId}!`);
+                fetchSubgraphData();
+            } else {
+                updateTransaction(tx.hash, 'failed');
+                showNotification('error', 'Transaction failed');
+            }
+        } catch (error: any) {
+            console.error('Staking error:', error);
+            showNotification('error', `Staking failed: ${error.message || 'Unknown error'}`);
+        }
+    };
+
+    const claimRewards = async (nodeId: string) => {
+        if (!wallet.isConnected) {
+            showNotification('error', 'Please connect your wallet first');
+            return;
+        }
+
+        try {
+            const contract = getContract(CONTRACT_ADDRESSES.PARTICIPATION, PARTICIPATION_ABI);
+            const tx = await contract.claimRewards(nodeId);
+            addTransaction(tx.hash, 'claim', { nodeId });
+
+            showNotification('success', `Claim transaction submitted! Hash: ${tx.hash.slice(0, 10)}...`);
+
+            const receipt = await tx.wait();
+            if (receipt.status === 1) {
+                updateTransaction(tx.hash, 'confirmed');
+                showNotification('success', `Successfully claimed rewards for Node ${nodeId}!`);
+                fetchSubgraphData();
+                fetchUserDpnBalance();
+            } else {
+                updateTransaction(tx.hash, 'failed');
+                showNotification('error', 'Transaction failed');
+            }
+        } catch (error: any) {
+            console.error('Claim error:', error);
+            showNotification('error', `Claim failed: ${error.message || 'Unknown error'}`);
+        }
+    };
+
+    const registerNewNode = async (metadata: string) => {
+        if (!wallet.isConnected) {
+            showNotification('error', 'Please connect your wallet first');
+            return;
+        }
+
+        try {
+            const contract = getContract(CONTRACT_ADDRESSES.NODE_REGISTRY, NODE_REGISTRY_ABI);
+            const tx = await contract.registerNode(metadata);
+            addTransaction(tx.hash, 'register');
+
+            showNotification('success', `Registration transaction submitted! Hash: ${tx.hash.slice(0, 10)}...`);
+            setRegisterModal({ isOpen: false, metadata: '' });
+
+            const receipt = await tx.wait();
+            if (receipt.status === 1) {
+                updateTransaction(tx.hash, 'confirmed');
+                showNotification('success', `Successfully registered new node!`);
+                fetchSubgraphData();
+            } else {
+                updateTransaction(tx.hash, 'failed');
+                showNotification('error', 'Transaction failed');
+            }
+        } catch (error: any) {
+            console.error('Registration error:', error);
+            showNotification('error', `Registration failed: ${error.message || 'Unknown error'}`);
+        }
+    };
+
+    const fetchUserDpnBalance = async () => {
+        if (!wallet.account) return;
+
+        try {
+            const contract = getContract(CONTRACT_ADDRESSES.DPN_TOKEN, DPN_TOKEN_ABI);
+            const balance = await contract.balanceOf(wallet.account);
+            setUserDpnBalance((window as any).ethers.utils.formatEther(balance));
+        } catch (error) {
+            console.error('Error fetching DPN balance:', error);
+        }
     };
 
     const connectWallet = async () => {
@@ -197,122 +252,52 @@ const DePINDashboard: React.FC = () => {
             balance: '0'
         });
         setUserFilter('all');
-        setUserPositions([]);
         showNotification('success', 'Wallet disconnected');
     };
 
-    const stakeToPool = async (tier: number, lockPeriod: number, amount: string) => {
-        if (!wallet.isConnected) {
-            showNotification('error', 'Please connect your wallet first');
-            return;
-        }
-
+    const switchToHardhatNetwork = async () => {
         try {
-            const contract = getContract(CONTRACT_ADDRESSES.STAKING_POOL, STAKING_POOL_ABI);
-            const amountWei = (window as any).ethers.utils.parseEther(amount);
-
-            const tx = await contract.stakeToPool(tier, lockPeriod, { value: amountWei });
-            addTransaction(tx.hash, 'pool_stake', { poolTier: tier, amount });
-
-            showNotification('success', `Pool staking transaction submitted! Hash: ${tx.hash.slice(0, 10)}...`);
-            setPoolStakeModal({ isOpen: false, tier: 0, lockPeriod: 0, amount: '' });
-
-            const receipt = await tx.wait();
-            if (receipt.status === 1) {
-                updateTransaction(tx.hash, 'confirmed');
-                showNotification('success', `Successfully staked ${amount} ETH in ${POOL_TIERS[tier].name} pool!`);
-                fetchPoolData();
-            } else {
-                updateTransaction(tx.hash, 'failed');
-                showNotification('error', 'Transaction failed');
-            }
+            await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x7A69' }], // 31337 in hex
+            });
         } catch (error: any) {
-            console.error('Pool staking error:', error);
-            showNotification('error', `Pool staking failed: ${error.message || 'Unknown error'}`);
+            if (error.code === 4902) {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: '0x7A69',
+                            chainName: 'Hardhat Localhost',
+                            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                            rpcUrls: ['http://127.0.0.1:8545'],
+                        }],
+                    });
+                } catch (addError) {
+                    showNotification('error', 'Failed to add Hardhat network');
+                }
+            }
         }
     };
 
-    const fetchPoolData = async () => {
-        if (!wallet.account) return;
-
+    const fetchBlockNumber = async (): Promise<void> => {
         try {
-            const contract = getContract(CONTRACT_ADDRESSES.STAKING_POOL, STAKING_POOL_ABI);
-
-            // Get user positions count
-            const positionCount = await contract.userPositionCount(wallet.account);
-            const positions: any[] = [];
-
-            // Fetch each position details
-            for (let i = 0; i < positionCount.toNumber(); i++) {
-                try {
-                    const positionDetails = await contract.getPositionDetails(wallet.account, i);
-                    if (positionDetails[0].isActive) {
-                        positions.push({
-                            tier: positionDetails[0].tier,
-                            lockPeriod: positionDetails[0].lockPeriod,
-                            amount: (window as any).ethers.utils.formatEther(positionDetails[0].amount),
-                            pendingRewards: (window as any).ethers.utils.formatEther(positionDetails[1]),
-                            timeToUnlock: positionDetails[2].toNumber(),
-                            canWithdraw: positionDetails[3]
-                        });
-                    }
-                } catch (error) {
-                    console.error(`Error fetching position ${i}:`, error);
-                }
+            const res = await fetch(RPC_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_blockNumber',
+                    params: [],
+                    id: 1,
+                }),
+            });
+            const result = await res.json();
+            if (result.result) {
+                setBlockNumber(parseInt(result.result, 16));
             }
-
-            setUserPositions(positions);
-
-            // Fetch pool statistics
-            const poolStatsArray: any[] = [];
-            for (let tier = 0; tier < 4; tier++) {
-                try {
-                    const stats = await contract.getPoolStats(tier);
-                    poolStatsArray.push({
-                        minStake: (window as any).ethers.utils.formatEther(stats[0].minStake),
-                        tierMultiplier: stats[0].tierMultiplier.toNumber(),
-                        totalStaked: (window as any).ethers.utils.formatEther(stats[0].totalStaked)
-                    });
-                } catch (error) {
-                    poolStatsArray.push({
-                        minStake: '0',
-                        tierMultiplier: 10000,
-                        totalStaked: '0'
-                    });
-                }
-            }
-
-            setPoolStats(poolStatsArray);
-
-            // Fetch global stats
-            try {
-                const globalStats = await contract.getGlobalStats();
-                setGlobalPoolStats({
-                    tvl: (window as any).ethers.utils.formatEther(globalStats[0]),
-                    totalRewards: (window as any).ethers.utils.formatEther(globalStats[1]),
-                    totalStakers: globalStats[2].toNumber(),
-                    poolDistribution: globalStats[3].map((val: any) =>
-                        parseFloat((window as any).ethers.utils.formatEther(val))
-                    )
-                });
-            } catch (error) {
-                console.error('Error fetching global stats:', error);
-            }
-
         } catch (error) {
-            console.error('Error fetching pool data:', error);
-        }
-    };
-
-    const fetchUserDpnBalance = async () => {
-        if (!wallet.account) return;
-
-        try {
-            const contract = getContract(CONTRACT_ADDRESSES.DPN_TOKEN, DPN_TOKEN_ABI);
-            const balance = await contract.balanceOf(wallet.account);
-            setUserDpnBalance((window as any).ethers.utils.formatEther(balance));
-        } catch (error) {
-            console.error('Error fetching DPN balance:', error);
+            console.error('Error fetching block number:', error);
         }
     };
 
@@ -402,38 +387,83 @@ const DePINDashboard: React.FC = () => {
     useEffect(() => {
         if (wallet.isConnected) {
             fetchUserDpnBalance();
-            fetchPoolData();
         }
     }, [wallet.isConnected, wallet.account]);
 
     useEffect(() => {
+        fetchBlockNumber();
         fetchSubgraphData();
         const interval = setInterval(() => {
+            fetchBlockNumber();
             fetchSubgraphData();
-            if (wallet.isConnected) {
-                fetchPoolData();
-            }
         }, 10000);
 
         return () => clearInterval(interval);
-    }, [wallet.isConnected]);
+    }, []);
 
     // Process data for charts
     const processChartData = () => {
-        const poolDistributionData = POOL_TIERS.map((tier, index) => ({
-            name: tier.name,
-            value: globalPoolStats.poolDistribution[index] || 0,
-            color: tier.color
-        })).filter(item => item.value > 0);
+        // Cumulative rewards over time
+        const rewardTimeline = data.rewards
+            .map((reward: any) => ({
+                time: new Date(parseInt(reward.timestamp) * 1000).toLocaleDateString(),
+                amount: parseFloat(reward.amount),
+                timestamp: parseInt(reward.timestamp)
+            }))
+            .sort((a, b) => a.timestamp - b.timestamp);
 
-        return { poolDistributionData };
+        let cumulative = 0;
+        const cumulativeRewardData = rewardTimeline.map(item => {
+            cumulative += item.amount;
+            return { ...item, cumulative };
+        });
+
+        // Staking by node
+        const stakingByNode = data.nodes.map((node: any) => {
+            const nodeStakes = data.stakes.filter((s: any) => s.nodeId === node.nodeId);
+            const totalStaked = nodeStakes.reduce((sum, stake: any) => sum + parseFloat(stake.amount), 0);
+            return {
+                nodeId: `Node ${node.nodeId}`,
+                staked: parseFloat(formatEth(totalStaked))
+            };
+        });
+
+        return { cumulativeRewardData, stakingByNode };
     };
 
-    const { poolDistributionData } = processChartData();
+    const { cumulativeRewardData, stakingByNode } = processChartData();
 
-    // Calculate user pool totals
-    const userPoolTotalStaked = userPositions.reduce((sum, pos) => sum + parseFloat(pos.amount), 0);
-    const userPoolTotalRewards = userPositions.reduce((sum, pos) => sum + parseFloat(pos.pendingRewards), 0);
+    // Calculate totals
+    const totals = {
+        nodes: data.nodes.length,
+        staked: formatEth(data.stakes.reduce((sum, stake: any) => sum + parseFloat(stake.amount), 0)),
+        rewards: data.rewards.reduce((sum, reward: any) => sum + parseFloat(reward.amount), 0),
+        uptime: data.uptimes.reduce((sum, uptime: any) => sum + parseFloat(uptime.minutesUp), 0)
+    };
+
+    // Filter nodes for table
+    const filteredNodes = data.nodes.filter((node: any) => {
+        const matchesSearch = node.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            node.nodeId.includes(searchTerm);
+        const matchesUser = userFilter === 'all' ||
+            (userFilter === 'mine' && wallet.account &&
+                node.owner.toLowerCase() === wallet.account.toLowerCase());
+        return matchesSearch && matchesUser;
+    });
+
+    // Get user-specific data
+    const userNodes = wallet.account ? data.nodes.filter((node: any) =>
+        node.owner.toLowerCase() === wallet.account!.toLowerCase()
+    ) : [];
+
+    const userTotalStake = userNodes.reduce((sum, node: any) => {
+        const nodeStakes = data.stakes.filter((s: any) => s.nodeId === node.nodeId);
+        return sum + nodeStakes.reduce((stakeSum, stake: any) => stakeSum + parseFloat(stake.amount), 0);
+    }, 0);
+
+    const userTotalRewards = data.rewards
+        .filter((reward: any) => wallet.account && reward.owner.toLowerCase() === wallet.account.toLowerCase())
+        .reduce((sum, reward: any) => sum + parseFloat(reward.amount), 0);
 
     if (loading) {
         return (
@@ -484,6 +514,7 @@ const DePINDashboard: React.FC = () => {
             )}
 
             <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+
                 {/* Header */}
                 <div style={{
                     backgroundColor: 'white',
@@ -517,6 +548,23 @@ const DePINDashboard: React.FC = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                             {wallet.isConnected ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    {wallet.chainId !== 31337 && (
+                                        <button
+                                            onClick={switchToHardhatNetwork}
+                                            style={{
+                                                padding: '8px 16px',
+                                                backgroundColor: '#ffc107',
+                                                color: '#212529',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                fontSize: '12px',
+                                                fontWeight: 'bold',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Switch to Hardhat
+                                        </button>
+                                    )}
                                     <div style={{
                                         padding: '8px 16px',
                                         backgroundColor: '#28a745',
@@ -560,6 +608,18 @@ const DePINDashboard: React.FC = () => {
                                     {walletLoading ? '🔄 Connecting...' : '🦊 Connect Wallet'}
                                 </button>
                             )}
+
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ color: '#666', fontSize: '0.9rem' }}>Current Block</div>
+                                <div style={{
+                                    fontSize: '1.8rem',
+                                    fontWeight: 'bold',
+                                    color: '#007bff'
+                                }}>
+                                    {blockNumber?.toLocaleString()}
+                                </div>
+                                <div style={{ color: '#28a745', fontSize: '0.8rem' }}>🟢 Live</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -609,9 +669,206 @@ const DePINDashboard: React.FC = () => {
                     </div>
                 </div>
 
-                {activeTab === 'pools' && (
+                {activeTab === 'nodes' ? (
                     <>
-                        {/* Pool Overview Cards */}
+                        {/* Node Operations Content */}
+                        {/* User Stats (when connected) */}
+                        {wallet.isConnected && userNodes.length > 0 && (
+                            <div style={{
+                                backgroundColor: '#e3f2fd',
+                                borderRadius: '10px',
+                                padding: '25px',
+                                marginBottom: '20px',
+                                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                                border: '2px solid #2196f3'
+                            }}>
+                                <h3 style={{ margin: '0 0 15px 0', color: '#1976d2' }}>
+                                    👤 Your Node Activity
+                                </h3>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                    gap: '20px'
+                                }}>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#1976d2' }}>
+                                            {userNodes.length}
+                                        </div>
+                                        <div style={{ color: '#666' }}>Your Nodes</div>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#1976d2' }}>
+                                            {formatEth(userTotalStake)} ETH
+                                        </div>
+                                        <div style={{ color: '#666' }}>Total Staked</div>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#1976d2' }}>
+                                            {userTotalRewards.toFixed(2)} DPN
+                                        </div>
+                                        <div style={{ color: '#666' }}>Rewards Earned</div>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#1976d2' }}>
+                                            {parseFloat(userDpnBalance).toFixed(2)} DPN
+                                        </div>
+                                        <div style={{ color: '#666' }}>DPN Balance</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Transaction Status (when connected) */}
+                        {wallet.isConnected && transactions.length > 0 && (
+                            <div style={{
+                                backgroundColor: '#fff3cd',
+                                borderRadius: '10px',
+                                padding: '20px',
+                                marginBottom: '20px',
+                                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                                border: '2px solid #ffc107'
+                            }}>
+                                <h3 style={{ margin: '0 0 15px 0', color: '#856404' }}>
+                                    ⏳ Recent Transactions
+                                </h3>
+                                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                    {transactions.slice(0, 5).map((tx) => (
+                                        <div key={tx.hash} style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: '8px 0',
+                                            borderBottom: '1px solid #ffeaa7'
+                                        }}>
+                                            <div>
+                                                <span style={{ fontWeight: 'bold', textTransform: 'capitalize' }}>
+                                                    {tx.type.replace('_', ' ')}
+                                                </span>
+                                                {tx.nodeId && ` Node ${tx.nodeId}`}
+                                                {tx.poolTier !== undefined && ` Pool`}
+                                                {tx.amount && ` (${tx.amount} ETH)`}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{
+                                                    padding: '2px 8px',
+                                                    borderRadius: '12px',
+                                                    fontSize: '10px',
+                                                    fontWeight: 'bold',
+                                                    backgroundColor:
+                                                        tx.status === 'confirmed' ? '#d4edda' :
+                                                            tx.status === 'failed' ? '#f8d7da' : '#fff3cd',
+                                                    color:
+                                                        tx.status === 'confirmed' ? '#155724' :
+                                                            tx.status === 'failed' ? '#721c24' : '#856404'
+                                                }}>
+                                                    {tx.status === 'pending' ? '⏳ Pending' :
+                                                        tx.status === 'confirmed' ? '✅ Confirmed' : '❌ Failed'}
+                                                </span>
+                                                <a
+                                                    href={`https://etherscan.io/tx/${tx.hash}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{ color: '#007bff', fontSize: '12px' }}
+                                                >
+                                                    {tx.hash.slice(0, 8)}...
+                                                </a>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Action Buttons (when connected) */}
+                        {wallet.isConnected && (
+                            <div style={{
+                                backgroundColor: 'white',
+                                borderRadius: '10px',
+                                padding: '20px',
+                                marginBottom: '20px',
+                                boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                            }}>
+                                <h3 style={{ margin: '0 0 15px 0', color: '#333' }}>🚀 Quick Actions</h3>
+                                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                    <button
+                                        onClick={() => setRegisterModal({ isOpen: true, metadata: '' })}
+                                        style={{
+                                            padding: '12px 24px',
+                                            backgroundColor: '#28a745',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            fontSize: '14px',
+                                            fontWeight: 'bold',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        📡 Register New Node
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Search and Filter */}
+                        <div style={{
+                            backgroundColor: 'white',
+                            borderRadius: '10px',
+                            padding: '20px',
+                            marginBottom: '20px',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                        }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <input
+                                    type="text"
+                                    placeholder="🔍 Search by node ID or owner address..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    style={{
+                                        flex: 1,
+                                        minWidth: '300px',
+                                        padding: '12px 16px',
+                                        border: '2px solid #e9ecef',
+                                        borderRadius: '8px',
+                                        fontSize: '1rem',
+                                        outline: 'none'
+                                    }}
+                                />
+                                {wallet.isConnected && (
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <button
+                                            onClick={() => setUserFilter('all')}
+                                            style={{
+                                                padding: '8px 16px',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                fontSize: '14px',
+                                                cursor: 'pointer',
+                                                backgroundColor: userFilter === 'all' ? '#007bff' : '#f8f9fa',
+                                                color: userFilter === 'all' ? 'white' : '#666'
+                                            }}
+                                        >
+                                            All Nodes
+                                        </button>
+                                        <button
+                                            onClick={() => setUserFilter('mine')}
+                                            style={{
+                                                padding: '8px 16px',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                fontSize: '14px',
+                                                cursor: 'pointer',
+                                                backgroundColor: userFilter === 'mine' ? '#007bff' : '#f8f9fa',
+                                                color: userFilter === 'mine' ? 'white' : '#666'
+                                            }}
+                                        >
+                                            My Nodes ({userNodes.length})
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Overview Cards */}
                         <div style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
@@ -625,10 +882,8 @@ const DePINDashboard: React.FC = () => {
                                 textAlign: 'center',
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
                             }}>
-                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL VALUE LOCKED</div>
-                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#007bff' }}>
-                                    {parseFloat(globalPoolStats.tvl).toFixed(2)} ETH
-                                </div>
+                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL NODES</div>
+                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#007bff' }}>{totals.nodes}</div>
                             </div>
                             <div style={{
                                 backgroundColor: 'white',
@@ -637,10 +892,8 @@ const DePINDashboard: React.FC = () => {
                                 textAlign: 'center',
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
                             }}>
-                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>POOL REWARDS</div>
-                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#28a745' }}>
-                                    {parseFloat(globalPoolStats.totalRewards).toFixed(2)} DPN
-                                </div>
+                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL STAKED</div>
+                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#28a745' }}>{totals.staked} ETH</div>
                             </div>
                             <div style={{
                                 backgroundColor: 'white',
@@ -649,10 +902,8 @@ const DePINDashboard: React.FC = () => {
                                 textAlign: 'center',
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
                             }}>
-                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>ACTIVE STAKERS</div>
-                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#6f42c1' }}>
-                                    {globalPoolStats.totalStakers}
-                                </div>
+                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL REWARDS</div>
+                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#6f42c1' }}>{totals.rewards} DPN</div>
                             </div>
                             <div style={{
                                 backgroundColor: 'white',
@@ -661,300 +912,207 @@ const DePINDashboard: React.FC = () => {
                                 textAlign: 'center',
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
                             }}>
-                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>YOUR POSITIONS</div>
-                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#fd7e14' }}>
-                                    {userPositions.length}
-                                </div>
+                                <div style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>NETWORK UPTIME</div>
+                                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#fd7e14' }}>{totals.uptime} min</div>
                             </div>
                         </div>
 
-                        {/* User Pool Stats */}
-                        {wallet.isConnected && userPositions.length > 0 && (
-                            <div style={{
-                                backgroundColor: '#e8f5e8',
-                                borderRadius: '10px',
-                                padding: '25px',
-                                marginBottom: '20px',
-                                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                                border: '2px solid #28a745'
-                            }}>
-                                <h3 style={{ margin: '0 0 15px 0', color: '#155724' }}>
-                                    🏆 Your Pool Activity
-                                </h3>
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                    gap: '20px'
-                                }}>
-                                    <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#155724' }}>
-                                            {userPositions.length}
-                                        </div>
-                                        <div style={{ color: '#666' }}>Active Positions</div>
-                                    </div>
-                                    <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#155724' }}>
-                                            {userPoolTotalStaked.toFixed(2)} ETH
-                                        </div>
-                                        <div style={{ color: '#666' }}>Total Staked</div>
-                                    </div>
-                                    <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#155724' }}>
-                                            {userPoolTotalRewards.toFixed(4)} DPN
-                                        </div>
-                                        <div style={{ color: '#666' }}>Pending Rewards</div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Pool Tiers */}
+                        {/* Charts */}
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
                             gap: '20px',
                             marginBottom: '30px'
                         }}>
-                            {POOL_TIERS.map((tier, index) => {
-                                const stats = poolStats[index];
-                                const multiplier = stats ? (stats.tierMultiplier / 100).toFixed(1) : '1.0';
-
-                                return (
-                                    <div key={index} style={{
-                                        backgroundColor: 'white',
-                                        borderRadius: '10px',
-                                        padding: '25px',
-                                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                                        border: `2px solid ${tier.color}`,
-                                        position: 'relative'
-                                    }}>
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '-10px',
-                                            left: '20px',
-                                            backgroundColor: tier.color,
-                                            color: tier.name === 'Diamond' ? '#000' : '#fff',
-                                            padding: '5px 15px',
-                                            borderRadius: '15px',
-                                            fontSize: '12px',
-                                            fontWeight: 'bold'
-                                        }}>
-                                            {tier.icon} {tier.name.toUpperCase()}
-                                        </div>
-
-                                        <div style={{ marginTop: '20px' }}>
-                                            <div style={{ marginBottom: '15px' }}>
-                                                <div style={{ color: '#666', fontSize: '0.9rem' }}>Minimum Stake</div>
-                                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: tier.color }}>
-                                                    {tier.minStake} ETH
-                                                </div>
-                                            </div>
-
-                                            <div style={{ marginBottom: '15px' }}>
-                                                <div style={{ color: '#666', fontSize: '0.9rem' }}>Reward Multiplier</div>
-                                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: tier.color }}>
-                                                    {multiplier}x
-                                                </div>
-                                            </div>
-
-                                            <div style={{ marginBottom: '20px' }}>
-                                                <div style={{ color: '#666', fontSize: '0.9rem' }}>Total Staked</div>
-                                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
-                                                    {stats ? parseFloat(stats.totalStaked).toFixed(2) : '0.00'} ETH
-                                                </div>
-                                            </div>
-
-                                            {wallet.isConnected && (
-                                                <button
-                                                    onClick={() => setPoolStakeModal({
-                                                        isOpen: true,
-                                                        tier: index,
-                                                        lockPeriod: 0,
-                                                        amount: ''
-                                                    })}
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '12px',
-                                                        backgroundColor: tier.color,
-                                                        color: tier.name === 'Diamond' ? '#000' : '#fff',
-                                                        border: 'none',
-                                                        borderRadius: '8px',
-                                                        fontSize: '14px',
-                                                        fontWeight: 'bold',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    💎 Stake in {tier.name}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Pool Distribution Chart */}
-                        {poolDistributionData.length > 0 && (
                             <div style={{
                                 backgroundColor: 'white',
                                 borderRadius: '10px',
                                 padding: '25px',
-                                marginBottom: '30px',
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
                             }}>
-                                <h3 style={{ marginBottom: '20px', color: '#333' }}>Pool Distribution</h3>
-                                <div style={{ width: '100%', height: '400px' }}>
+                                <h3 style={{ marginBottom: '20px', color: '#333' }}>Cumulative Rewards Over Time</h3>
+                                <div style={{ width: '100%', height: '300px' }}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={poolDistributionData}
-                                                cx="50%"
-                                                cy="50%"
-                                                labelLine={false}
-                                                label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                                                outerRadius={80}
-                                                fill="#8884d8"
-                                                dataKey="value"
-                                            >
-                                                {poolDistributionData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip formatter={(value: any) => [`${value.toFixed(2)} ETH`, 'Staked']} />
-                                        </PieChart>
+                                        <LineChart data={cumulativeRewardData}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="time" />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Line type="monotone" dataKey="cumulative" stroke="#007bff" strokeWidth={3} />
+                                        </LineChart>
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                        )}
 
-                        {/* User Positions */}
-                        {wallet.isConnected && userPositions.length > 0 && (
                             <div style={{
                                 backgroundColor: 'white',
                                 borderRadius: '10px',
                                 padding: '25px',
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
                             }}>
-                                <h3 style={{ marginBottom: '20px', color: '#333' }}>Your Staking Positions</h3>
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                        <tr style={{ backgroundColor: '#f8f9fa' }}>
-                                            <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Pool</th>
-                                            <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Lock Period</th>
-                                            <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Amount</th>
-                                            <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Pending Rewards</th>
-                                            <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Unlock Status</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody>
-                                        {userPositions.map((position, index) => (
-                                            <tr key={index} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#f8f9fa' }}>
-                                                <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
-                                                    <span style={{
-                                                        backgroundColor: POOL_TIERS[position.tier].color,
-                                                        color: POOL_TIERS[position.tier].name === 'Diamond' ? '#000' : '#fff',
-                                                        padding: '4px 12px',
-                                                        borderRadius: '15px',
-                                                        fontSize: '0.8rem',
-                                                        fontWeight: 'bold'
-                                                    }}>
-                                                        {POOL_TIERS[position.tier].icon} {POOL_TIERS[position.tier].name}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
-                                                    <div>
-                                                        <div style={{ fontWeight: 'bold' }}>
-                                                            {LOCK_PERIODS[position.lockPeriod].name}
-                                                        </div>
-                                                        <div style={{ fontSize: '0.8rem', color: '#666' }}>
-                                                            {LOCK_PERIODS[position.lockPeriod].bonus}
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
-                                                    <div style={{ fontWeight: 'bold' }}>
-                                                        {parseFloat(position.amount).toFixed(4)} ETH
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
-                                                    <div style={{ fontWeight: 'bold', color: '#28a745' }}>
-                                                        {parseFloat(position.pendingRewards).toFixed(6)} DPN
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
-                                                    {position.canWithdraw ? (
-                                                        <span style={{
-                                                            backgroundColor: '#d4edda',
-                                                            color: '#155724',
-                                                            padding: '4px 12px',
-                                                            borderRadius: '15px',
-                                                            fontSize: '0.8rem'
-                                                        }}>
-                                                            🟢 Unlocked
-                                                        </span>
-                                                    ) : (
-                                                        <span style={{
-                                                            backgroundColor: '#fff3cd',
-                                                            color: '#856404',
-                                                            padding: '4px 12px',
-                                                            borderRadius: '15px',
-                                                            fontSize: '0.8rem'
-                                                        }}>
-                                                            🔒 {formatTimeRemaining(position.timeToUnlock)}
-                                                        </span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        </tbody>
-                                    </table>
+                                <h3 style={{ marginBottom: '20px', color: '#333' }}>Staking by Node</h3>
+                                <div style={{ width: '100%', height: '300px' }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={stakingByNode}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="nodeId" />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Bar dataKey="staked" fill="#28a745" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 </div>
                             </div>
-                        )}
+                        </div>
 
-                        {/* Empty state for pools */}
-                        {wallet.isConnected && userPositions.length === 0 && (
-                            <div style={{
-                                backgroundColor: 'white',
-                                borderRadius: '10px',
-                                padding: '40px',
-                                textAlign: 'center',
-                                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                                color: '#666'
-                            }}>
-                                <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🏆</div>
-                                <h3 style={{ marginBottom: '10px' }}>No Pool Positions Yet</h3>
-                                <p>Start earning multiplied rewards by staking in our tiered pools!</p>
-                                <button
-                                    onClick={() => setPoolStakeModal({
-                                        isOpen: true,
-                                        tier: 0,
-                                        lockPeriod: 0,
-                                        amount: ''
-                                    })}
-                                    style={{
-                                        padding: '12px 24px',
-                                        backgroundColor: '#007bff',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '8px',
-                                        fontSize: '16px',
-                                        fontWeight: 'bold',
-                                        cursor: 'pointer',
-                                        marginTop: '15px'
-                                    }}
-                                >
-                                    🥉 Start with Bronze Pool
-                                </button>
+                        {/* Node Table */}
+                        <div style={{
+                            backgroundColor: 'white',
+                            borderRadius: '10px',
+                            padding: '25px',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                        }}>
+                            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+                                Registered Nodes {wallet.isConnected && userFilter === 'mine' && `(Your Nodes: ${userNodes.length})`}
+                            </h3>
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                    <tr style={{ backgroundColor: '#f8f9fa' }}>
+                                        <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Node ID</th>
+                                        <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Owner</th>
+                                        <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Registered</th>
+                                        <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Status</th>
+                                        {wallet.isConnected && (
+                                            <th style={{ padding: '15px', textAlign: 'left', borderBottom: '2px solid #dee2e6' }}>Actions</th>
+                                        )}
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {filteredNodes.map((node: any, index: number) => (
+                                        <tr key={node.id} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#f8f9fa' }}>
+                                            <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                      <span style={{
+                          backgroundColor: '#007bff',
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '15px',
+                          fontSize: '0.8rem',
+                          marginRight: '10px'
+                      }}>
+                        {node.nodeId}
+                      </span>
+                                                Node {node.nodeId}
+                                            </td>
+                                            <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <code style={{ backgroundColor: '#f8f9fa', padding: '4px 8px', borderRadius: '4px' }}>
+                                                        {formatAddress(node.owner)}
+                                                    </code>
+                                                    {wallet.account && node.owner.toLowerCase() === wallet.account.toLowerCase() && (
+                                                        <span style={{
+                                                            backgroundColor: '#007bff',
+                                                            color: 'white',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '12px',
+                                                            fontSize: '10px',
+                                                            fontWeight: 'bold'
+                                                        }}>
+                                                            YOU
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                                                {formatTime(node.timestamp)}
+                                            </td>
+                                            <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                      <span style={{
+                          backgroundColor: '#d4edda',
+                          color: '#155724',
+                          padding: '4px 12px',
+                          borderRadius: '15px',
+                          fontSize: '0.8rem'
+                      }}>
+                        🟢 Active
+                      </span>
+                                            </td>
+                                            {wallet.isConnected && (
+                                                <td style={{ padding: '15px', borderBottom: '1px solid #dee2e6' }}>
+                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                        <button
+                                                            onClick={() => setStakeModal({
+                                                                isOpen: true,
+                                                                nodeId: node.nodeId,
+                                                                amount: ''
+                                                            })}
+                                                            style={{
+                                                                padding: '6px 12px',
+                                                                backgroundColor: '#007bff',
+                                                                color: 'white',
+                                                                border: 'none',
+                                                                borderRadius: '4px',
+                                                                fontSize: '12px',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            💰 Stake
+                                                        </button>
+                                                        {wallet.account && node.owner.toLowerCase() === wallet.account.toLowerCase() && (
+                                                            <button
+                                                                onClick={() => claimRewards(node.nodeId)}
+                                                                style={{
+                                                                    padding: '6px 12px',
+                                                                    backgroundColor: '#28a745',
+                                                                    color: 'white',
+                                                                    border: 'none',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '12px',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                🎁 Claim
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                    </tbody>
+                                </table>
                             </div>
-                        )}
+
+                            {filteredNodes.length === 0 && (
+                                <div style={{
+                                    textAlign: 'center',
+                                    padding: '40px',
+                                    color: '#666'
+                                }}>
+                                    {userFilter === 'mine'
+                                        ? "You don't own any nodes yet."
+                                        : "No nodes found matching your search criteria."
+                                    }
+                                </div>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* Staking Pools Content - Using Modular Component */}
+                        <StakingPools
+                            wallet={wallet}
+                            onNotification={showNotification}
+                            onTransaction={addTransaction}
+                            onUpdateTransaction={updateTransaction}
+                        />
                     </>
                 )}
             </div>
 
-            {/* Pool Stake Modal */}
-            {poolStakeModal.isOpen && (
+            {/* Modals */}
+            {/* Stake Modal */}
+            {stakeModal.isOpen && (
                 <div style={{
                     position: 'fixed',
                     top: 0,
@@ -972,52 +1130,25 @@ const DePINDashboard: React.FC = () => {
                         borderRadius: '12px',
                         padding: '30px',
                         width: '90%',
-                        maxWidth: '600px',
+                        maxWidth: '500px',
                         boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
                     }}>
                         <h2 style={{ margin: '0 0 20px 0', color: '#333' }}>
-                            💎 Stake in {POOL_TIERS[poolStakeModal.tier].name} Pool
+                            💰 Stake ETH on Node {stakeModal.nodeId}
                         </h2>
                         <p style={{ color: '#666', marginBottom: '20px' }}>
-                            Stake ETH to earn {(poolStats[poolStakeModal.tier]?.tierMultiplier / 100 || 100).toFixed(1)}x multiplied rewards with optional time-lock bonuses.
+                            Stake ETH to earn rewards from this node's operations.
                         </p>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                                Lock Period:
-                            </label>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                                {LOCK_PERIODS.map((period, index) => (
-                                    <button
-                                        key={index}
-                                        onClick={() => setPoolStakeModal(prev => ({...prev, lockPeriod: index}))}
-                                        style={{
-                                            padding: '12px',
-                                            border: `2px solid ${poolStakeModal.lockPeriod === index ? POOL_TIERS[poolStakeModal.tier].color : '#e9ecef'}`,
-                                            borderRadius: '8px',
-                                            backgroundColor: poolStakeModal.lockPeriod === index ? POOL_TIERS[poolStakeModal.tier].color + '20' : 'white',
-                                            cursor: 'pointer',
-                                            fontSize: '12px',
-                                            textAlign: 'center'
-                                        }}
-                                    >
-                                        <div style={{ fontWeight: 'bold' }}>{period.name}</div>
-                                        <div style={{ color: '#666' }}>{period.bonus}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
                         <div style={{ marginBottom: '20px' }}>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
                                 Amount (ETH):
                             </label>
                             <input
                                 type="number"
-                                placeholder={`Minimum: ${POOL_TIERS[poolStakeModal.tier].minStake}`}
+                                placeholder="0.1"
                                 step="0.01"
-                                value={poolStakeModal.amount}
-                                onChange={(e) => setPoolStakeModal(prev => ({...prev, amount: e.target.value}))}
+                                value={stakeModal.amount}
+                                onChange={(e) => setStakeModal(prev => ({...prev, amount: e.target.value}))}
                                 style={{
                                     width: '100%',
                                     padding: '12px',
@@ -1027,31 +1158,10 @@ const DePINDashboard: React.FC = () => {
                                     outline: 'none'
                                 }}
                             />
-                            <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-                                Minimum stake: {POOL_TIERS[poolStakeModal.tier].minStake} ETH
-                            </div>
                         </div>
-
-                        <div style={{
-                            backgroundColor: '#f8f9fa',
-                            padding: '15px',
-                            borderRadius: '8px',
-                            marginBottom: '20px',
-                            border: '1px solid #e9ecef'
-                        }}>
-                            <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>Reward Calculation:</h4>
-                            <div style={{ fontSize: '14px', color: '#666' }}>
-                                <div>• Pool Multiplier: {(poolStats[poolStakeModal.tier]?.tierMultiplier / 100 || 100).toFixed(1)}x</div>
-                                <div>• Time Bonus: {LOCK_PERIODS[poolStakeModal.lockPeriod].multiplier}</div>
-                                <div style={{ fontWeight: 'bold', color: '#28a745', marginTop: '5px' }}>
-                                    Total Multiplier: {((poolStats[poolStakeModal.tier]?.tierMultiplier / 100 || 100) * parseFloat(LOCK_PERIODS[poolStakeModal.lockPeriod].multiplier)).toFixed(2)}x
-                                </div>
-                            </div>
-                        </div>
-
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                             <button
-                                onClick={() => setPoolStakeModal({ isOpen: false, tier: 0, lockPeriod: 0, amount: '' })}
+                                onClick={() => setStakeModal({ isOpen: false, nodeId: '', amount: '' })}
                                 style={{
                                     padding: '12px 24px',
                                     backgroundColor: '#6c757d',
@@ -1064,21 +1174,101 @@ const DePINDashboard: React.FC = () => {
                                 Cancel
                             </button>
                             <button
-                                onClick={() => stakeToPool(poolStakeModal.tier, poolStakeModal.lockPeriod, poolStakeModal.amount)}
-                                disabled={!poolStakeModal.amount || parseFloat(poolStakeModal.amount) < parseFloat(POOL_TIERS[poolStakeModal.tier].minStake)}
+                                onClick={() => stakeForNode(stakeModal.nodeId, stakeModal.amount)}
+                                disabled={!stakeModal.amount || parseFloat(stakeModal.amount) <= 0}
                                 style={{
                                     padding: '12px 24px',
-                                    backgroundColor: (!poolStakeModal.amount || parseFloat(poolStakeModal.amount) < parseFloat(POOL_TIERS[poolStakeModal.tier].minStake))
-                                        ? '#6c757d' : POOL_TIERS[poolStakeModal.tier].color,
-                                    color: POOL_TIERS[poolStakeModal.tier].name === 'Diamond' && poolStakeModal.amount && parseFloat(poolStakeModal.amount) >= parseFloat(POOL_TIERS[poolStakeModal.tier].minStake) ? '#000' : 'white',
+                                    backgroundColor: !stakeModal.amount || parseFloat(stakeModal.amount) <= 0
+                                        ? '#6c757d' : '#007bff',
+                                    color: 'white',
                                     border: 'none',
                                     borderRadius: '8px',
-                                    cursor: (!poolStakeModal.amount || parseFloat(poolStakeModal.amount) < parseFloat(POOL_TIERS[poolStakeModal.tier].minStake))
-                                        ? 'not-allowed' : 'pointer',
-                                    fontWeight: 'bold'
+                                    cursor: !stakeModal.amount || parseFloat(stakeModal.amount) <= 0
+                                        ? 'not-allowed' : 'pointer'
                                 }}
                             >
-                                {POOL_TIERS[poolStakeModal.tier].icon} Stake in {POOL_TIERS[poolStakeModal.tier].name}
+                                Stake ETH
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Register Node Modal */}
+            {registerModal.isOpen && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        backgroundColor: 'white',
+                        borderRadius: '12px',
+                        padding: '30px',
+                        width: '90%',
+                        maxWidth: '500px',
+                        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
+                    }}>
+                        <h2 style={{ margin: '0 0 20px 0', color: '#333' }}>
+                            📡 Register New Node
+                        </h2>
+                        <p style={{ color: '#666', marginBottom: '20px' }}>
+                            Register your infrastructure node to participate in the DePIN network.
+                        </p>
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                                Node Metadata (JSON):
+                            </label>
+                            <textarea
+                                placeholder='{"location": "US-East", "type": "storage", "capacity": "1TB"}'
+                                value={registerModal.metadata}
+                                onChange={(e) => setRegisterModal(prev => ({...prev, metadata: e.target.value}))}
+                                rows={4}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    border: '2px solid #e9ecef',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    outline: 'none',
+                                    fontFamily: 'monospace'
+                                }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => setRegisterModal({ isOpen: false, metadata: '' })}
+                                style={{
+                                    padding: '12px 24px',
+                                    backgroundColor: '#6c757d',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => registerNewNode(registerModal.metadata)}
+                                disabled={!registerModal.metadata.trim()}
+                                style={{
+                                    padding: '12px 24px',
+                                    backgroundColor: !registerModal.metadata.trim() ? '#6c757d' : '#28a745',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: !registerModal.metadata.trim() ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                Register Node
                             </button>
                         </div>
                     </div>

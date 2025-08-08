@@ -6,14 +6,15 @@ const axios = require('axios');
 const app = express();
 const PORT = 4000;
 
-const AVALANCHE_SUBNET_RPC = 'http://127.0.0.1:56614/ext/bc/VJzNPCCvPagF82S7XzTUjjZDkJCPDXQ18XVAQt65TUtELEQNJ/rpc';
+// Updated to connect to Hardhat node instead of Avalanche subnet
+const HARDHAT_RPC = 'http://127.0.0.1:8545';
 
 app.use(cors());
 app.use(express.json());
 
 app.post('/rpc', async (req, res) => {
     try {
-        const response = await axios.post(AVALANCHE_SUBNET_RPC, req.body);
+        const response = await axios.post(HARDHAT_RPC, req.body);
         res.json(response.data);
     } catch (error) {
         console.error('RPC Relay Error:', error.message);
@@ -23,6 +24,7 @@ app.post('/rpc', async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 RPC relay running at http://localhost:${PORT}/rpc`);
+    console.log(`🔗 Proxying requests to Hardhat node at ${HARDHAT_RPC}`);
 });
 
 app.get('/nodes', (req, res) => {
@@ -49,5 +51,3 @@ app.get('/rewards', (req, res) => {
         { nodeId: 1, timestamp: 1719007200, reward: 9 }
     ]);
 });
-
-
