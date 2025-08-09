@@ -1,0 +1,865 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnableInvalidOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "OwnableUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "EmergencyWithdraw",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "enum StakingPool.PoolTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minStake",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tierMultiplier",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "baseRewardRate",
+        "type": "uint256"
+      }
+    ],
+    "name": "PoolConfigUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum StakingPool.PoolTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum StakingPool.LockPeriod",
+        "name": "lockPeriod",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "shares",
+        "type": "uint256"
+      }
+    ],
+    "name": "PoolStaked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "rewardAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "totalClaimed",
+        "type": "uint256"
+      }
+    ],
+    "name": "RewardsClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "penalty",
+        "type": "uint256"
+      }
+    ],
+    "name": "StakeWithdrawn",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "BASIS_POINTS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SECONDS_PER_DAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "claimAllRewards",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "claimRewards",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "dpnTokenContract",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "emergencyWithdraw",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "emergencyWithdrawEnabled",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "enableEmergencyWithdraw",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getGlobalStats",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "tvl",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalRewards",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalStakers",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[4]",
+        "name": "poolDistribution",
+        "type": "uint256[4]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum StakingPool.PoolTier",
+        "name": "tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "getPoolStats",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "minStake",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "tierMultiplier",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "baseRewardRate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalStaked",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalShares",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "isActive",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct StakingPool.PoolConfig",
+        "name": "config",
+        "type": "tuple"
+      },
+      {
+        "internalType": "uint256",
+        "name": "activeStakers",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "averageStake",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "poolUtilization",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPositionDetails",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum StakingPool.PoolTier",
+            "name": "tier",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum StakingPool.LockPeriod",
+            "name": "lockPeriod",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "shares",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "stakedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "unlocksAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lastRewardClaim",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "isActive",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct StakingPool.StakePosition",
+        "name": "position",
+        "type": "tuple"
+      },
+      {
+        "internalType": "uint256",
+        "name": "pendingRewards",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timeToUnlock",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "canWithdraw",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserPositions",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum StakingPool.PoolTier",
+            "name": "tier",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum StakingPool.LockPeriod",
+            "name": "lockPeriod",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "shares",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "stakedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "unlocksAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lastRewardClaim",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "isActive",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct StakingPool.StakePosition[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum StakingPool.LockPeriod",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "name": "lockConfigs",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "lockDays",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timeMultiplier",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "nodeRightsContract",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum StakingPool.PoolTier",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "name": "poolConfigs",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "minStake",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tierMultiplier",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "baseRewardRate",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalStaked",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalShares",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_dpnToken",
+        "type": "address"
+      }
+    ],
+    "name": "setDPNTokenContract",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_nodeRights",
+        "type": "address"
+      }
+    ],
+    "name": "setNodeRightsContract",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum StakingPool.PoolTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "enum StakingPool.LockPeriod",
+        "name": "lockPeriod",
+        "type": "uint8"
+      }
+    ],
+    "name": "stakeToPool",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalRewardsDistributed",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalValueLocked",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum StakingPool.LockPeriod",
+        "name": "lockPeriod",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lockDays",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timeMultiplier",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateLockConfig",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum StakingPool.PoolTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minStake",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "tierMultiplier",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "baseRewardRate",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      }
+    ],
+    "name": "updatePoolConfig",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "userPositionCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "userPositions",
+    "outputs": [
+      {
+        "internalType": "enum StakingPool.PoolTier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "enum StakingPool.LockPeriod",
+        "name": "lockPeriod",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "shares",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "stakedAt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "unlocksAt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lastRewardClaim",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdrawStake",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
+  }
+]

@@ -31,3 +31,116 @@ dataSources:
         - event: UptimeRecorded(indexed uint256,uint256,uint256)
           handler: handleUptimeRecorded
       file: Participation/Participation.wasm
+  - kind: ethereum/contract
+    name: StakingPool
+    network: localhost
+    source:
+      address: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+      abi: StakingPool
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - PoolStake
+        - StakeWithdrawal
+        - RewardClaim
+        - PoolConfig
+        - GlobalStats
+      abis:
+        - name: StakingPool
+          file: StakingPool/StakingPool.json
+      eventHandlers:
+        - event: PoolStaked(indexed address,indexed uint256,uint8,uint8,uint256,uint256)
+          handler: handlePoolStaked
+        - event: StakeWithdrawn(indexed address,indexed uint256,uint256,uint256)
+          handler: handleStakeWithdrawn
+        - event: RewardsClaimed(indexed address,indexed uint256,uint256,uint256)
+          handler: handleRewardsClaimed
+        - event: PoolConfigUpdated(uint8,uint256,uint256,uint256)
+          handler: handlePoolConfigUpdated
+        - event: EmergencyWithdraw(indexed address,uint256)
+          handler: handleEmergencyWithdraw
+      file: Participation/Participation.wasm
+  - kind: ethereum/contract
+    name: NodeRightsNFT
+    network: localhost
+    source:
+      address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+      abi: NodeRightsNFT
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - NodeRights
+        - NodeUpgrade
+        - PerformanceUpdate
+        - NodeSlashing
+        - CrossChainBridge
+        - RewardDistribution
+      abis:
+        - name: NodeRightsNFT
+          file: NodeRightsNFT/NodeRightsNFT.json
+      eventHandlers:
+        - event: NodeRightsMinted(indexed uint256,indexed address,uint8,uint256,uint256)
+          handler: handleNodeRightsMinted
+        - event: NodeUpgraded(indexed uint256,uint256,uint256,uint256)
+          handler: handleNodeUpgraded
+        - event: PerformanceUpdated(indexed uint256,uint256,uint256,uint8)
+          handler: handlePerformanceUpdated
+        - event: NodeSlashed(indexed uint256,uint8,uint256,string)
+          handler: handleNodeSlashed
+        - event: CrossChainBridge(indexed uint256,string,address)
+          handler: handleCrossChainBridge
+        - event: RewardsDistributed(indexed uint256,uint256,uint256)
+          handler: handleRewardsDistributed
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleNFTTransfer
+      file: Participation/Participation.wasm
+  - kind: ethereum/contract
+    name: DPNToken
+    network: localhost
+    source:
+      address: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      abi: DPNToken
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - TokenTransfer
+        - TokenBalance
+      abis:
+        - name: DPNToken
+          file: DPNToken/DPNToken.json
+      eventHandlers:
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleDPNTransfer
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleDPNApproval
+      file: Participation/Participation.wasm
+  - kind: ethereum/contract
+    name: NodeRegistry
+    network: localhost
+    source:
+      address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+      abi: NodeRegistry
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - RegisteredNode
+        - NodeStatusChange
+      abis:
+        - name: NodeRegistry
+          file: NodeRegistry/NodeRegistry.json
+      eventHandlers:
+        - event: NodeRegistered(indexed uint256,indexed address,uint256)
+          handler: handleNodeRegistryRegistered
+      file: Participation/Participation.wasm
