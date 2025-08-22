@@ -18,11 +18,14 @@ DePINSimulator/
 
 #### Start Services
 ```bash
+
+# Start Hardhat blockchain node
+npx hardhat node --hostname 0.0.0.0
+
 # Start Graph Node infrastructure (first time)
 docker-compose up -d
 
-# Start Hardhat blockchain node
-npx hardhat node
+
 
 # Check Docker services status
 docker-compose ps

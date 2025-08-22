@@ -1,15 +1,15 @@
 # =============================================================================
-# EXISTING ENTITIES (PRESERVED EXACTLY AS-IS)
+# PARTICIPATION ENTITIES
 # =============================================================================
 
-type Node @entity(immutable: false) {
+type Node @entity(immutable: true) {
   id: Bytes!
   nodeId: BigInt!
   owner: Bytes!
   timestamp: BigInt!
 }
 
-type Reward @entity(immutable: false) {
+type Reward @entity(immutable: true) {
   id: Bytes!
   nodeId: BigInt!
   owner: Bytes!
@@ -17,7 +17,7 @@ type Reward @entity(immutable: false) {
   timestamp: BigInt!
 }
 
-type Stake @entity(immutable: false) {
+type Stake @entity(immutable: true) {
   id: Bytes!
   nodeId: BigInt!
   staker: Bytes!
@@ -25,7 +25,7 @@ type Stake @entity(immutable: false) {
   timestamp: BigInt!
 }
 
-type Uptime @entity(immutable: false) {
+type Uptime @entity(immutable: true) {
   id: Bytes!
   nodeId: BigInt!
   minutesUp: BigInt!
@@ -33,81 +33,81 @@ type Uptime @entity(immutable: false) {
 }
 
 # =============================================================================
-# NEW ENTITIES FOR STAKING POOL CONTRACT
+# STAKING POOL ENTITIES
 # =============================================================================
 
-type PoolStake @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
-  user: Bytes!                  # address
+type PoolStake @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes!
   positionId: BigInt!
-  tier: Int!                    # 0=BRONZE, 1=SILVER, 2=GOLD, 3=DIAMOND
-  lockPeriod: Int!              # 0=NONE, 1=THIRTY, 2=NINETY, 3=YEAR
-  amount: BigInt!               # ETH amount in wei
-  shares: BigInt!               # Pool shares received
+  tier: Int!
+  lockPeriod: Int!
+  amount: BigInt!
+  shares: BigInt!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-type StakeWithdrawal @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type StakeWithdrawal @entity(immutable: true) {
+  id: Bytes!
   user: Bytes!
   positionId: BigInt!
-  amount: BigInt!               # Amount withdrawn
-  penalty: BigInt!              # Penalty applied
+  amount: BigInt!
+  penalty: BigInt!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-type RewardClaim @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type RewardClaim @entity(immutable: true) {
+  id: Bytes!
   user: Bytes!
   positionId: BigInt!
-  rewardAmount: BigInt!         # DPN rewards claimed
-  totalClaimed: BigInt!         # Total claimed by this position
+  rewardAmount: BigInt!
+  totalClaimed: BigInt!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
 type PoolConfig @entity(immutable: false) {
-  id: Bytes!                    # tier as string
-  tier: Int!                    # Pool tier number
-  minStake: BigInt!             # Minimum ETH stake
-  tierMultiplier: BigInt!       # Reward multiplier (basis points)
-  baseRewardRate: BigInt!       # DPN per second
+  id: Bytes!
+  tier: Int!
+  minStake: BigInt!
+  tierMultiplier: BigInt!
+  baseRewardRate: BigInt!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
 type GlobalStats @entity(immutable: false) {
-  id: Bytes!                    # "global"
-  totalValueLocked: BigInt!     # Total ETH across all pools
-  totalRewardsDistributed: BigInt! # Total DPN distributed
+  id: Bytes!
+  totalValueLocked: BigInt!
+  totalRewardsDistributed: BigInt!
   lastUpdated: BigInt!
   blockNumber: BigInt!
 }
 
 # =============================================================================
-# NEW ENTITIES FOR NODE RIGHTS NFT CONTRACT
+# NODE RIGHTS NFT ENTITIES
 # =============================================================================
 
 type NodeRights @entity(immutable: false) {
-  id: Bytes!                    # tokenId
+  id: Bytes!
   tokenId: BigInt!
-  owner: Bytes!                 # current owner
-  nodeType: Int!                # 0=STORAGE, 1=COMPUTE, 2=BANDWIDTH
-  stakedETH: BigInt!            # ETH staked
-  stakedDPN: BigInt!            # DPN staked
+  owner: Bytes!
+  nodeType: Int!
+  stakedETH: BigInt!
+  stakedDPN: BigInt!
   mintedAt: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-type NodeUpgrade @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type NodeUpgrade @entity(immutable: true) {
+  id: Bytes!
   tokenId: BigInt!
   additionalETH: BigInt!
   additionalDPN: BigInt!
@@ -117,40 +117,40 @@ type NodeUpgrade @entity(immutable: false) {
   transactionHash: Bytes!
 }
 
-type PerformanceUpdate @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type PerformanceUpdate @entity(immutable: true) {
+  id: Bytes!
   tokenId: BigInt!
   newScore: BigInt!
-  uptimeAdded: BigInt!          # Seconds added
-  status: Int!                  # 0=ACTIVE, 1=SLASHED_MINOR, 2=SLASHED_MAJOR, 3=TERMINATED
+  uptimeAdded: BigInt!
+  status: Int!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-type NodeSlashing @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type NodeSlashing @entity(immutable: true) {
+  id: Bytes!
   tokenId: BigInt!
-  newStatus: Int!               # Node status after slashing
-  penaltyAmount: BigInt!        # DPN penalty
+  newStatus: Int!
+  penaltyAmount: BigInt!
   reason: String!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-type CrossChainBridge @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type CrossChainBridge @entity(immutable: true) {
+  id: Bytes!
   tokenId: BigInt!
   destinationChain: String!
-  operator: Bytes!              # Who initiated bridge
+  operator: Bytes!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-type RewardDistribution @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type RewardDistribution @entity(immutable: true) {
+  id: Bytes!
   tokenId: BigInt!
   rewardAmount: BigInt!
   performanceBonus: BigInt!
@@ -160,11 +160,11 @@ type RewardDistribution @entity(immutable: false) {
 }
 
 # =============================================================================
-# NEW ENTITIES FOR DPN TOKEN CONTRACT
+# DPN TOKEN ENTITIES
 # =============================================================================
 
-type TokenTransfer @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
+type TokenTransfer @entity(immutable: true) {
+  id: Bytes!
   from: Bytes!
   to: Bytes!
   value: BigInt!
@@ -174,30 +174,21 @@ type TokenTransfer @entity(immutable: false) {
 }
 
 type TokenBalance @entity(immutable: false) {
-  id: Bytes!                    # address
+  id: Bytes!
   holder: Bytes!
   balance: BigInt!
   lastUpdated: BigInt!
 }
 
 # =============================================================================
-# NEW ENTITIES FOR NODE REGISTRY CONTRACT
+# NODE REGISTRY ENTITIES
 # =============================================================================
 
-type RegisteredNode @entity(immutable: false) {
-  id: Bytes!                    # nodeId
+type RegisteredNode @entity(immutable: true) {
+  id: Bytes!
   nodeId: BigInt!
   owner: Bytes!
   registeredAt: BigInt!
-  blockNumber: BigInt!
-  transactionHash: Bytes!
-}
-
-type NodeStatusChange @entity(immutable: false) {
-  id: Bytes!                    # tx-hash-log-index
-  nodeId: BigInt!
-  newStatus: Int!
-  timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }

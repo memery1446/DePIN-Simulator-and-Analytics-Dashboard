@@ -1,0 +1,196 @@
+
+ð è # =============================================================================
+# PARTICIPATION ENTITIES
+# =============================================================================
+
+type Node @entity(immutable: true) {
+  id: Bytes!
+  nodeId: BigInt!
+  owner: Bytes!
+  timestamp: BigInt!
+}
+
+type Reward @entity(immutable: true) {
+  id: Bytes!
+  nodeId: BigInt!
+  owner: Bytes!
+  amount: BigInt!
+  timestamp: BigInt!
+}
+
+type Stake @entity(immutable: true) {
+  id: Bytes!
+  nodeId: BigInt!
+  staker: Bytes!
+  amount: BigInt!
+  timestamp: BigInt!
+}
+
+type Uptime @entity(immutable: true) {
+  id: Bytes!
+  nodeId: BigInt!
+  minutesUp: BigInt!
+  timestamp: BigInt!
+}
+
+# =============================================================================
+# STAKING POOL ENTITIES
+# =============================================================================
+
+type PoolStake @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes!
+  positionId: BigInt!
+  tier: Int!
+  lockPeriod: Int!
+  amount: BigInt!
+  shares: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type StakeWithdrawal @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes!
+  positionId: BigInt!
+  amount: BigInt!
+  penalty: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type RewardClaim @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes!
+  positionId: BigInt!
+  rewardAmount: BigInt!
+  totalClaimed: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type PoolConfig @entity(immutable: false) {
+  id: Bytes!
+  tier: Int!
+  minStake: BigInt!
+  tierMultiplier: BigInt!
+  baseRewardRate: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type GlobalStats @entity(immutable: false) {
+  id: Bytes!
+  totalValueLocked: BigInt!
+  totalRewardsDistributed: BigInt!
+  lastUpdated: BigInt!
+  blockNumber: BigInt!
+}
+
+# =============================================================================
+# NODE RIGHTS NFT ENTITIES
+# =============================================================================
+
+type NodeRights @entity(immutable: false) {
+  id: Bytes!
+  tokenId: BigInt!
+  owner: Bytes!
+  nodeType: Int!
+  stakedETH: BigInt!
+  stakedDPN: BigInt!
+  mintedAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type NodeUpgrade @entity(immutable: true) {
+  id: Bytes!
+  tokenId: BigInt!
+  additionalETH: BigInt!
+  additionalDPN: BigInt!
+  newPerformanceScore: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type PerformanceUpdate @entity(immutable: true) {
+  id: Bytes!
+  tokenId: BigInt!
+  newScore: BigInt!
+  uptimeAdded: BigInt!
+  status: Int!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type NodeSlashing @entity(immutable: true) {
+  id: Bytes!
+  tokenId: BigInt!
+  newStatus: Int!
+  penaltyAmount: BigInt!
+  reason: String!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type CrossChainBridge @entity(immutable: true) {
+  id: Bytes!
+  tokenId: BigInt!
+  destinationChain: String!
+  operator: Bytes!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type RewardDistribution @entity(immutable: true) {
+  id: Bytes!
+  tokenId: BigInt!
+  rewardAmount: BigInt!
+  performanceBonus: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# =============================================================================
+# DPN TOKEN ENTITIES
+# =============================================================================
+
+type TokenTransfer @entity(immutable: true) {
+  id: Bytes!
+  from: Bytes!
+  to: Bytes!
+  value: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type TokenBalance @entity(immutable: false) {
+  id: Bytes!
+  holder: Bytes!
+  balance: BigInt!
+  lastUpdated: BigInt!
+}
+
+# =============================================================================
+# NODE REGISTRY ENTITIES
+# =============================================================================
+
+type RegisteredNode @entity(immutable: true) {
+  id: Bytes!
+  nodeId: BigInt!
+  owner: Bytes!
+  registeredAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+è 

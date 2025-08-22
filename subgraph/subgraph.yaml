@@ -3,13 +3,13 @@ schema:
   file: ./schema.graphql
 dataSources:
   # =============================================================================
-  # EXISTING: Participation Contract (UPDATED ADDRESS ONLY)
+  # EXISTING: Participation Contract
   # =============================================================================
   - kind: ethereum/contract
     name: Participation
-    network: localhost
+    network: mainnet  # CHANGED FROM localhost TO mainnet
     source:
-      address: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"  # UPDATED ADDRESS
+      address: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
       abi: Participation
       startBlock: 0
     mapping:
@@ -36,11 +36,11 @@ dataSources:
       file: ./src/mapping.ts
 
   # =============================================================================
-  # NEW: StakingPool Contract
+  # StakingPool Contract
   # =============================================================================
   - kind: ethereum/contract
     name: StakingPool
-    network: localhost
+    network: mainnet  # CHANGED FROM localhost TO mainnet
     source:
       address: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
       abi: StakingPool
@@ -71,12 +71,12 @@ dataSources:
           handler: handleEmergencyWithdraw
       file: ./src/mapping.ts
 
-#  # =============================================================================
-#  # NEW: NodeRightsNFT Contract
-#  # =============================================================================
+  # =============================================================================
+  # NodeRightsNFT Contract
+  # =============================================================================
   - kind: ethereum/contract
     name: NodeRightsNFT
-    network: localhost
+    network: mainnet  # CHANGED FROM localhost TO mainnet
     source:
       address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
       abi: NodeRightsNFT
@@ -112,12 +112,12 @@ dataSources:
           handler: handleNFTTransfer
       file: ./src/mapping.ts
 
-#  # =============================================================================
-#  # NEW: DPNToken Contract
-#  # =============================================================================
+  # =============================================================================
+  # DPNToken Contract
+  # =============================================================================
   - kind: ethereum/contract
     name: DPNToken
-    network: localhost
+    network: mainnet  # CHANGED FROM localhost TO mainnet
     source:
       address: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
       abi: DPNToken
@@ -139,12 +139,12 @@ dataSources:
           handler: handleDPNApproval
       file: ./src/mapping.ts
 
-#  # =============================================================================
-#  # NEW: NodeRegistry Contract
-#  # =============================================================================
+  # =============================================================================
+  # NodeRegistry Contract
+  # =============================================================================
   - kind: ethereum/contract
     name: NodeRegistry
-    network: localhost
+    network: mainnet  # CHANGED FROM localhost TO mainnet
     source:
       address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
       abi: NodeRegistry
