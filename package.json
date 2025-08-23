@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "start:depin": "./scripts/start-depin.sh",
+    "stop:depin": "./scripts/stop-depin.sh",
+    "restart:depin": "npm run stop:depin && npm run start:depin"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.9",

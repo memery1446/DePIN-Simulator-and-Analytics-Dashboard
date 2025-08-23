@@ -76,6 +76,7 @@ npx hardhat test --network localhost
 ```bash
 # Start the RPC relay service
 node rpc-relay.js
+PORT=4000 HARDHAT_RPC=http://127.0.0.1:8545 node rpc-relay.js
 
 # Keep this running for frontend connectivity
 ```
@@ -295,3 +296,7 @@ You know everything is working when:
 - **Run tests regularly** to generate fresh subgraph data
 - **Bookmark the GraphQL playground** for easy data exploration
 - **The contract addresses are deterministic** - they're always the same on localhost
+
+get inside docker container: 
+
+docker exec -it depinsimulator-graph-node-1 sh

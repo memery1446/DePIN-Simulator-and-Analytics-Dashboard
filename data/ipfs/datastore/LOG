@@ -82,3 +82,17 @@
 20:12:19.533330 table@remove removed @12
 20:12:19.533439 table@remove removed @5
 20:12:19.533705 table@remove removed @2
+20:57:46.134468 db@close closing
+20:57:46.135398 db@close done T·923.083µs
+=============== Aug 22, 2025 (UTC) ===============
+20:59:27.685137 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+20:59:27.700083 version@stat F·[0 1] S·9KiB[0B 9KiB] Sc·[0.00 0.00]
+20:59:27.700508 db@open opening
+20:59:27.701043 journal@recovery F·1
+20:59:27.705994 journal@recovery recovering @16
+20:59:27.710435 memdb@flush created L0@19 N·72 S·7KiB "/F5..EJQ,v240":"/pr..RCM,v286"
+20:59:27.712276 version@stat F·[1 1] S·16KiB[7KiB 9KiB] Sc·[0.25 0.00]
+20:59:27.715675 db@janitor F·4 G·0
+20:59:27.717107 db@open done T·15.167709ms
+23:19:31.629530 db@close closing
+23:19:31.630800 db@close done T·1.270375ms

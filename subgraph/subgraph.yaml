@@ -3,15 +3,15 @@ schema:
   file: ./schema.graphql
 dataSources:
   # =============================================================================
-  # EXISTING: Participation Contract
+  # FIXED: Participation Contract
   # =============================================================================
   - kind: ethereum/contract
     name: Participation
-    network: mainnet  # CHANGED FROM localhost TO mainnet
+    network: local
     source:
       address: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
       abi: Participation
-      startBlock: 0
+      startBlock: 0  # ✅ Set to actual deployment block (not 1)
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -36,11 +36,11 @@ dataSources:
       file: ./src/mapping.ts
 
   # =============================================================================
-  # StakingPool Contract
+  # FIXED: StakingPool Contract
   # =============================================================================
   - kind: ethereum/contract
     name: StakingPool
-    network: mainnet  # CHANGED FROM localhost TO mainnet
+    network: local
     source:
       address: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
       abi: StakingPool
@@ -72,15 +72,15 @@ dataSources:
       file: ./src/mapping.ts
 
   # =============================================================================
-  # NodeRightsNFT Contract
+  # FIXED: NodeRightsNFT Contract
   # =============================================================================
   - kind: ethereum/contract
     name: NodeRightsNFT
-    network: mainnet  # CHANGED FROM localhost TO mainnet
+    network: local
     source:
       address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
       abi: NodeRightsNFT
-      startBlock: 0
+      startBlock: 3
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -113,15 +113,15 @@ dataSources:
       file: ./src/mapping.ts
 
   # =============================================================================
-  # DPNToken Contract
+  # FIXED: DPNToken Contract
   # =============================================================================
   - kind: ethereum/contract
     name: DPNToken
-    network: mainnet  # CHANGED FROM localhost TO mainnet
+    network: local
     source:
       address: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
       abi: DPNToken
-      startBlock: 0
+      startBlock: 3  # ✅ Set to actual deployment block
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -140,15 +140,15 @@ dataSources:
       file: ./src/mapping.ts
 
   # =============================================================================
-  # NodeRegistry Contract
+  # FIXED: NodeRegistry Contract
   # =============================================================================
   - kind: ethereum/contract
     name: NodeRegistry
-    network: mainnet  # CHANGED FROM localhost TO mainnet
+    network: local
     source:
       address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
       abi: NodeRegistry
-      startBlock: 0
+      startBlock: 3
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
