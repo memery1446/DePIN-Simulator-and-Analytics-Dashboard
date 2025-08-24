@@ -22,6 +22,9 @@ npx hardhat node --hostname 0.0.0.0
 
 # Keep this running - you'll see transactions here
 ```
+# Start the RPC relay service
+node rpc-relay.js
+PORT=4000 HARDHAT_RPC=http://127.0.0.1:8545 node rpc-relay.js
 
 ### **2. Start Graph Infrastructure** (Terminal 2)
 ```bash
@@ -74,9 +77,6 @@ npx hardhat test --network localhost
 
 ### **6. Start RPC Relay** (Terminal 4)
 ```bash
-# Start the RPC relay service
-node rpc-relay.js
-PORT=4000 HARDHAT_RPC=http://127.0.0.1:8545 node rpc-relay.js
 
 # Keep this running for frontend connectivity
 ```

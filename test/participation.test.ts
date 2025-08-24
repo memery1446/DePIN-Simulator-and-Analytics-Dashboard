@@ -10,6 +10,7 @@ describe("Participation Contract", function () {
     beforeEach(async function () {
         [owner, addr1, addr2] = await ethers.getSigners();
 
+        // Deploy fresh contract for each test
         const Participation = await ethers.getContractFactory("Participation", owner);
         participation = await Participation.deploy();
         await participation.waitForDeployment();
@@ -60,8 +61,8 @@ describe("Participation Contract", function () {
     describe("Subgraph Event Generation", function () {
         it("should generate all events for subgraph testing", async function () {
             const contractAddress = await participation.getAddress();
-            console.log("\n🏗️  Contract deployed at:", contractAddress);
-            console.log("📝 Update your subgraph.yaml with this address if needed");
+            console.log("\n🗏️  Contract deployed at:", contractAddress);
+            console.log("📋 Update your subgraph.yaml with this address if needed");
 
             // 1. Register multiple nodes
             console.log("\n1️⃣  Registering nodes...");

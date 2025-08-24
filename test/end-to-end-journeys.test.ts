@@ -335,14 +335,20 @@ describe("End-to-End Functional Verification", function () {
             console.log("1️⃣  All users staking simultaneously...");
 
             // Use appropriate stake amounts for each tier
-            const stakeAmounts = ["0.1", "2.0", "10.0"]; // Bronze, Silver, Gold minimums
-            const tierIndexes = [0, 1, 2]; // Bronze, Silver, Gold
+            const tierIndexes = [0, 1, 2] as const; // Bronze, Silver, Gold
+
+            const minStakes = await Promise.all(
+                tierIndexes.map(async (tier) => {
+                    const cfg = await stakingPool.poolConfigs(tier);
+                    return cfg.minStake as bigint; // already in wei
+                })
+            );
 
             const stakingPromises = users.map((user, index) =>
                 stakingPool.connect(user).stakeToPool(
-                    tierIndexes[index], // Different tiers
-                    0, // No lock for simplicity
-                    { value: ethers.parseEther(stakeAmounts[index]) }
+                    tierIndexes[index],
+                    0, // no lock
+                    { value: minStakes[index] } // >= live minimum
                 )
             );
 

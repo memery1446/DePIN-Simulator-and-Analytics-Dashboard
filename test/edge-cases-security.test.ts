@@ -371,8 +371,16 @@ describe("Edge Cases & Security Tests", function () {
             const receipt = await tx.wait();
 
             // Acceptable threshold based on current implementation
-            expect(Number(receipt!.gasUsed)).to.be.lessThan(2_400_000);
-            console.log(`   ✅ Batch claim used ${receipt!.gasUsed} gas for ${positions.length} positions`);
+            const gasUsed = Number(receipt!.gasUsed);
+            const perPos = Math.floor(gasUsed / positions.length);
+            console.log(`   ✅ Batch claim used ${gasUsed} gas for ${positions.length} positions (~${perPos} gas/pos)`);
+
+            const MAX_PER_POS = 25_000;   // linear cap per position
+            const BASE_OVERHEAD = 200_000; // one-time call overhead
+
+            expect(perPos).to.be.lessThan(MAX_PER_POS);
+            expect(gasUsed).to.be.lessThan(BASE_OVERHEAD + MAX_PER_POS * positions.length);
+
 
             console.log("   🎯 Gas griefing prevention verified");
         });
