@@ -19,6 +19,7 @@ DePINSimulator/
 ```bash
 # Start Hardhat blockchain FIRST
 npx hardhat node --hostname 0.0.0.0
+npx hardhat node --port 8545
 
 # Keep this running - you'll see transactions here
 ```
