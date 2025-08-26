@@ -43,8 +43,9 @@ docker-compose ps
 ```bash
 # Compile and deploy contracts
 npx hardhat compile
-npx hardhat run scripts/deploy.ts --network localhost
-
+npx hardhat run scripts/deploy-minimal.ts --network localhost
+# for test version
+npx hardhat run scripts/deploy-with-test-data.ts --network localhost
 # Note the contract addresses - they're always the same:
 # DPN Token:     0x5FbDB2315678afecb367f032d93F642f64180aa3
 # StakingPool:   0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
