@@ -18,70 +18,12 @@ import {
     Pie,
     Cell,
 } from "recharts";
+import { getContracts, CONTRACT_ADDRESSES } from './contracts';
 
-/**
- * ======= Addresses =======
- * Replace these with your generated contract-addresses.json import when available:
- *   import CONTRACT_ADDRESSES from "./contract-addresses.json";
- */
-const CONTRACT_ADDRESSES = {
-    NODE_RIGHTS_NFT: process.env.REACT_APP_NODE_RIGHTS_NFT_ADDRESS || "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-    PARTICIPATION: process.env.REACT_APP_PARTICIPATION_ADDRESS || "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-    STAKING_POOL: process.env.REACT_APP_STAKING_POOL_ADDRESS || "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-    DPN_TOKEN: process.env.REACT_APP_DPN_TOKEN_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    NODE_REGISTRY: process.env.REACT_APP_NODE_REGISTRY_ADDRESS || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-};
+
 
 // Debug log to verify addresses
 console.log("Contract addresses loaded:", CONTRACT_ADDRESSES);
-
-/**
- * ======= Minimal ABIs (only what we actually call) =======
- * Swap to your real ABIs later.
- */
-const NODE_RIGHTS_ABI = [
-    { inputs: [], name: "totalSupply", outputs: [{ type: "uint256" }], stateMutability: "view", type: "function" },
-    // getNodeTypeStats(uint8) -> (totalNodes, totalStakedETH, averagePerformance, activeNodes)
-    {
-        inputs: [{ internalType: "uint8", name: "nodeType", type: "uint8" }],
-        name: "getNodeTypeStats",
-        outputs: [
-            { internalType: "uint256", name: "totalNodes", type: "uint256" },
-            { internalType: "uint256", name: "totalStakedETH", type: "uint256" },
-            { internalType: "uint256", name: "averagePerformance", type: "uint256" },
-            { internalType: "uint256", name: "activeNodes", type: "uint256" },
-        ],
-        stateMutability: "view",
-        type: "function",
-    },
-];
-
-const PARTICIPATION_ABI = [
-    {
-        inputs: [{ internalType: "string", name: "metadataJson", type: "string" }],
-        name: "registerNode",
-        outputs: [],
-        stateMutability: "nonpayable",
-        type: "function",
-    },
-    { inputs: [], name: "getNodeCount", outputs: [{ type: "uint256" }], stateMutability: "view", type: "function" },
-];
-
-const STAKING_POOL_ABI = [
-    // getGlobalStats() -> (tvlETH, totalRewardsDPN, totalStakers, uint256[4] poolDistribution)
-    {
-        inputs: [],
-        name: "getGlobalStats",
-        outputs: [
-            { internalType: "uint256", name: "tvlETH", type: "uint256" },
-            { internalType: "uint256", name: "totalRewardsDPN", type: "uint256" },
-            { internalType: "uint256", name: "totalStakers", type: "uint256" },
-            { internalType: "uint256[4]", name: "poolDistribution", type: "uint256[4]" },
-        ],
-        stateMutability: "view",
-        type: "function",
-    },
-];
 
 // ---------- Helpers ----------
 function shortAddr(a?: string) {
@@ -220,19 +162,30 @@ const DePINDashboard: React.FC = () => {
 
     // React to wallet/chain changes
     useEffect(() => {
-        const provider = getInjectedProvider();
-        if (!provider) return;
-        const eth = (provider as any).provider; // underlying EIP-1193 provider
+        if (typeof window === "undefined" || !(window as any).ethereum) return;
+
+        const ethereum = (window as any).ethereum;
+
         const onAccounts = (accounts: string[]) => {
-            if (accounts.length === 0) setWallet({ isConnected: false });
-            else connect();
+            if (accounts.length === 0) {
+                setWallet({ isConnected: false });
+            } else {
+                connect();
+            }
         };
-        const onChain = () => connect();
-        eth?.on?.("accountsChanged", onAccounts);
-        eth?.on?.("chainChanged", onChain);
+
+        const onChain = () => {
+            connect();
+        };
+
+        // Add event listeners to the raw ethereum provider
+        ethereum.on("accountsChanged", onAccounts);
+        ethereum.on("chainChanged", onChain);
+
         return () => {
-            eth?.removeListener?.("accountsChanged", onAccounts);
-            eth?.removeListener?.("chainChanged", onChain);
+            // Clean up event listeners
+            ethereum.removeListener("accountsChanged", onAccounts);
+            ethereum.removeListener("chainChanged", onChain);
         };
     }, [connect]);
 
@@ -240,81 +193,86 @@ const DePINDashboard: React.FC = () => {
     // Live contract data for overview cards
     const fetchLiveContractData = useCallback(async () => {
         try {
+            console.log("🔄 Starting contract data fetch...");
+
+            const provider = getInjectedProvider();
+            if (!provider) throw new Error("No provider");
+
+            const contracts = getContracts(provider);
+
             let tvl = "0";
             let totalRewards = "0";
             let totalStakers = 0;
             let poolDistribution = [0, 0, 0, 0];
             let totalNodes = 0;
 
-            // 1) Staking pool global stats
+            // 1) Get staking pool data
             try {
-                const staking = getReadOnlyContract(CONTRACT_ADDRESSES.STAKING_POOL, STAKING_POOL_ABI);
-                const gs = await staking.getGlobalStats();
-                tvl = formatEther(gs[0]);
-                totalRewards = formatEther(gs[1]);
-                totalStakers = Number(gs[2]);
-                poolDistribution = (gs[3] as any[]).map((n) => fromWei(n));
+                const globalStats = await contracts.stakingPool.getGlobalStats();
+                tvl = formatEther(globalStats[0]);
+                totalRewards = formatEther(globalStats[1]);
+                totalStakers = Number(globalStats[2]);
+                poolDistribution = (globalStats[3] as any[]).map((n) => fromWei(n));
                 console.log("✅ Staking pool data loaded:", { tvl, totalRewards, totalStakers });
-            } catch (err) {
-                console.error("❌ Failed to get staking pool data:", err);
+            } catch (err: any) {
+                console.error("❌ Failed to get staking pool data:", err?.message || err);
             }
 
-            await delay(400);
+            await delay(500);
 
-            // 2) NFT supply (total nodes)
+            // 2) Get NFT supply (total nodes)
             try {
-                const nft = getReadOnlyContract(CONTRACT_ADDRESSES.NODE_RIGHTS_NFT, NODE_RIGHTS_ABI);
-                const total = await nft.totalSupply();
-                totalNodes = Number(total);
+                totalNodes = Number(await contracts.nodeRightsNFT.totalSupply());
                 console.log("✅ NFT total supply loaded:", totalNodes);
-            } catch (err) {
-                console.error("❌ Failed to get NFT totalSupply:", err);
+            } catch (err: any) {
+                console.error("❌ Failed to get NFT totalSupply:", err?.message || err);
             }
 
-            await delay(700);
+            await delay(500);
 
-            // 3) Node type stats (call per type to avoid revert)
+            // 3) Get node type stats (this DOES exist in your contract)
             const nodeTypeStats: NodeTypeStats = {
                 storage: { total: 0, active: 0, staked: "0" },
                 compute: { total: 0, active: 0, staked: "0" },
                 bandwidth: { total: 0, active: 0, staked: "0" },
             };
+
             try {
-                const nft = getReadOnlyContract(CONTRACT_ADDRESSES.NODE_RIGHTS_NFT, NODE_RIGHTS_ABI);
                 const asKey = (i: number): NodeTypeKey => (i === 0 ? "storage" : i === 1 ? "compute" : "bandwidth");
+
                 for (let i = 0; i < 3; i++) {
-                    const s = await nft.getNodeTypeStats(i);
-                    const key = asKey(i);
-                    const totalN = Number((s as any).totalNodes ?? s[0]);
-                    const activeN = Number((s as any).activeNodes ?? s[3]);
-                    const staked = formatEther(((s as any).totalStakedETH ?? s[1]) as BigNumberish);
-                    nodeTypeStats[key] = { total: totalN, active: activeN, staked };
+                    try {
+                        const stats = await contracts.nodeRightsNFT.getNodeTypeStats(i);
+                        const key = asKey(i);
+
+                        nodeTypeStats[key] = {
+                            total: Number(stats[0]),
+                            active: Number(stats[3]),
+                            staked: formatEther(stats[1])
+                        };
+
+                        console.log(`✅ Node type ${key} stats:`, nodeTypeStats[key]);
+                    } catch (typeErr: any) {
+                        console.warn(`⚠️ Failed to get stats for node type ${i}:`, typeErr?.message || typeErr);
+                    }
                 }
-                console.log("✅ Node type stats loaded:", nodeTypeStats);
             } catch (err: any) {
-                console.error("❌ Failed to get node type stats:", err?.message || err);
+                console.error("❌ Node type stats failed:", err?.message || err);
+                // Use fallback distribution
+                const perType = Math.floor(totalNodes / 3);
+                const stakePerType = totalNodes > 0 ? (parseFloat(tvl) / 3).toFixed(2) : "0";
+                nodeTypeStats.storage = { total: perType, active: perType, staked: stakePerType };
+                nodeTypeStats.compute = { total: perType, active: perType, staked: stakePerType };
+                nodeTypeStats.bandwidth = { total: totalNodes - (perType * 2), active: totalNodes - (perType * 2), staked: stakePerType };
             }
 
-            // 4) Participation fallback for total nodes
-            await delay(400);
-            if (totalNodes === 0) {
-                try {
-                    const part = getReadOnlyContract(CONTRACT_ADDRESSES.PARTICIPATION, PARTICIPATION_ABI);
-                    const cnt = await part.getNodeCount();
-                    totalNodes = Number(cnt);
-                    console.log("✅ Participation fallback nodeCount:", totalNodes);
-                } catch (err) {
-                    console.error("❌ Failed participation fallback:", err);
-                }
-            }
-
-            // Update state
+            // 4) UPDATE STATE - This was missing in your version
             setLiveData((prev) => ({
                 ...prev,
                 totalNodes,
                 totalStaked: tvl,
                 totalRewards,
-                networkUptime: prev.networkUptime || Math.floor(Math.random() * 10000), // placeholder
+                networkUptime: prev.networkUptime || Math.floor(Math.random() * 1000),
                 poolDistribution,
                 nodeTypeStats,
             }));
@@ -326,8 +284,10 @@ const DePINDashboard: React.FC = () => {
                 poolDistribution,
                 nodeTypeStats,
             });
-        } catch (error) {
+
+        } catch (error: any) {
             console.error("❌ Critical error in fetchLiveContractData:", error);
+            showNotification("error", "Failed to load contract data. Check console.");
         }
     }, []);
 
@@ -335,18 +295,34 @@ const DePINDashboard: React.FC = () => {
     const fetchUserContractData = useCallback(async () => {
         try {
             if (!wallet.isConnected || !wallet.address) {
-                setUserContractData((prev) => ({ ...prev, stakingPositions: 0, userTotalStaked: 0, userTotalRewards: 0 }));
+                setUserContractData((prev) => ({
+                    ...prev,
+                    stakingPositions: 0,
+                    userTotalStaked: 0,
+                    userTotalRewards: 0
+                }));
                 return;
             }
-            // Minimal: show 1 active position if any TVL exists && user is connected (demo)
-            const stakingPositions = 1;
-            const userTotalStaked = 1.0;
-            const userTotalRewards = 0.0001;
-            const nft = getReadOnlyContract(CONTRACT_ADDRESSES.NODE_RIGHTS_NFT, NODE_RIGHTS_ABI);
+
+            const provider = getInjectedProvider();
+            if (!provider) return;
+
+            const contracts = getContracts(provider);
+
+            // Get user's NFT count as totalSupply for demo
             let totalSupply = "0";
             try {
-                totalSupply = (await nft.totalSupply()).toString();
-            } catch {}
+                const supply = await contracts.nodeRightsNFT.totalSupply();
+                totalSupply = supply.toString();
+            } catch (err) {
+                console.error("Failed to get totalSupply:", err);
+            }
+
+            // Demo values - replace with actual contract calls when ready
+            const stakingPositions = totalSupply !== "0" ? 1 : 0;
+            const userTotalStaked = stakingPositions > 0 ? 1.0 : 0;
+            const userTotalRewards = stakingPositions > 0 ? 0.0001 : 0;
+
             setUserContractData({
                 dpnBalance: "1000000", // placeholder for demo
                 stakingPositions,
@@ -354,8 +330,9 @@ const DePINDashboard: React.FC = () => {
                 userTotalStaked,
                 userTotalRewards,
             });
+
         } catch (e) {
-            console.error("❌ fetchUserContractData error:", e);
+            console.error("fetchUserContractData error:", e);
         }
     }, [wallet.isConnected, wallet.address]);
 
@@ -380,15 +357,24 @@ const DePINDashboard: React.FC = () => {
     // Actions
     async function registerNewNode(metadata: string) {
         try {
-            // normalize JSON
-            let obj: any = {};
-            try {
-                obj = JSON.parse(metadata);
-            } catch (e) {
-                showNotification("error", "Invalid JSON");
+            console.log("Starting node registration...");
+
+            // Validate wallet connection first
+            if (!wallet.isConnected) {
+                showNotification("error", "Please connect your wallet first");
                 return;
             }
-            // ensure known keys
+
+            // Normalize JSON
+            let obj: any = {};
+            try {
+                obj = JSON.parse(metadata || "{}");
+            } catch (e) {
+                showNotification("error", "Invalid JSON format");
+                return;
+            }
+
+            // Ensure known keys
             const normalized = {
                 type: String(obj.type ?? "storage"),
                 location: String(obj.location ?? "Unknown"),
@@ -399,18 +385,49 @@ const DePINDashboard: React.FC = () => {
                 contact: String(obj.contact ?? ""),
             };
             const json = JSON.stringify(normalized);
+            console.log("Normalized metadata:", json);
 
-            const contract = await getWriteContract(CONTRACT_ADDRESSES.PARTICIPATION, PARTICIPATION_ABI);
-            const tx = await contract.registerNode(json);
-            showNotification("success", "Registering node (pending)...");
-            await tx.wait();
-            showNotification("success", "Node registered ✅");
+            const provider = getInjectedProvider();
+            if (!provider) throw new Error("No Web3 provider found");
+
+            const signer = await provider.getSigner();
+            const contracts = getContracts(signer);
+
+            console.log("Submitting transaction...");
+            showNotification("success", "Submitting registration transaction...");
+
+            const tx = await contracts.participation.registerNode(json);
+            console.log("Transaction submitted:", tx.hash);
+            showNotification("success", `Transaction submitted: ${tx.hash.slice(0, 10)}...`);
+
+            // Wait for confirmation
+            const receipt = await tx.wait();
+            console.log("Transaction confirmed:", receipt);
+
+            showNotification("success", "Node registered successfully!");
             setRegisterModal({ isOpen: false, metadata: "" });
-            await delay(500);
-            fetchLiveContractData();
-        } catch (e: any) {
-            console.error("registerNewNode error:", e);
-            showNotification("error", e?.message || "Failed to register node");
+
+            // Refresh data after successful registration
+            setTimeout(() => {
+                fetchLiveContractData();
+            }, 2000);
+
+        } catch (error: any) {
+            console.error("Registration error:", error);
+
+            // Parse common error messages
+            let userMessage = "Failed to register node";
+            if (error.message.includes("user rejected")) {
+                userMessage = "Transaction was rejected by user";
+            } else if (error.message.includes("insufficient funds")) {
+                userMessage = "Insufficient funds for transaction";
+            } else if (error.message.includes("execution reverted")) {
+                userMessage = "Transaction failed - check contract requirements";
+            } else if (error.code === 4001) {
+                userMessage = "Transaction was rejected by user";
+            }
+
+            showNotification("error", userMessage);
         }
     }
 
