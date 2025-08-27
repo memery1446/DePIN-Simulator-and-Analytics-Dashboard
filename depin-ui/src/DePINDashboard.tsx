@@ -1,11 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-    BrowserProvider,
-    Contract,
-    formatEther,
-    parseEther,
-    type BigNumberish,
-} from "ethers";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BrowserProvider, JsonRpcProvider, formatEther } from "ethers";
 import {
     ResponsiveContainer,
     LineChart,
@@ -18,11 +12,15 @@ import {
     Pie,
     Cell,
 } from "recharts";
-import { getContracts, CONTRACT_ADDRESSES } from './contracts';
+import { getContracts, CONTRACT_ADDRESSES } from "./contracts";
 
+// Direct JSON-RPC for safe reads
+const READ_URL = process.env.REACT_APP_NETWORK_URL || "http://127.0.0.1:8545";
+const getReadProvider = () => new JsonRpcProvider(READ_URL);
 
+// Backoff window for flaky calls
+const STATS_BACKOFF_MS = 60_000;
 
-// Debug log to verify addresses
 console.log("Contract addresses loaded:", CONTRACT_ADDRESSES);
 
 // ---------- Helpers ----------
@@ -33,34 +31,11 @@ function shortAddr(a?: string) {
 function delay(ms: number) {
     return new Promise((r) => setTimeout(r, ms));
 }
-function fromWei(v: BigNumberish) {
-    try {
-        return parseFloat(formatEther(v));
-    } catch {
-        return 0;
-    }
-}
-function toWeiStr(eth: string) {
-    return parseEther(eth || "0").toString();
-}
-
-// ---------- Wallet + Contracts ----------
 function getInjectedProvider(): BrowserProvider | null {
     if (typeof window !== "undefined" && (window as any).ethereum) {
         return new BrowserProvider((window as any).ethereum);
     }
     return null;
-}
-function getReadOnlyContract(address: string, abi: any) {
-    const provider = getInjectedProvider();
-    if (!provider) throw new Error("No injected provider");
-    return new Contract(address, abi, provider);
-}
-async function getWriteContract(address: string, abi: any) {
-    const provider = getInjectedProvider();
-    if (!provider) throw new Error("No injected provider");
-    const signer = await provider.getSigner();
-    return new Contract(address, abi, signer);
 }
 
 // ---------- Types ----------
@@ -68,16 +43,16 @@ type NodeTypeKey = "storage" | "compute" | "bandwidth";
 type NodeTypeStats = Record<NodeTypeKey, { total: number; active: number; staked: string }>;
 type LiveData = {
     totalNodes: number;
-    totalStaked: string; // ETH as string
-    totalRewards: string; // DPN as string
+    totalStaked: string; // ETH (string)
+    totalRewards: string; // DPN (string)
     networkUptime: number;
-    poolDistribution: number[]; // 4 buckets
+    poolDistribution: number[];
     nodeTypeStats: NodeTypeStats;
 };
 type UserData = {
-    dpnBalance: string; // placeholder
+    dpnBalance: string;
     stakingPositions: number;
-    totalSupply: string; // from NFT
+    totalSupply: string;
     userTotalStaked: number;
     userTotalRewards: number;
 };
@@ -92,12 +67,15 @@ const DePINDashboard: React.FC = () => {
         ethBalance?: string;
     }>({ isConnected: false });
 
-    // UI state
+    // Toast
     const [notif, setNotif] = useState<{ kind: "success" | "error"; msg: string } | null>(null);
     const showNotification = (kind: "success" | "error", msg: string) => {
         setNotif({ kind, msg });
         setTimeout(() => setNotif(null), 3500);
     };
+
+    // Backoff
+    const statsBackoffUntil = useRef(0);
 
     // Data state
     const [liveData, setLiveData] = useState<LiveData>({
@@ -133,12 +111,11 @@ const DePINDashboard: React.FC = () => {
         amount: string;
     }>({ isOpen: false, tier: 0, lockPeriod: 0, amount: "" });
 
-    // Connect / Disconnect
+    // Connect / disconnect
     const connect = useCallback(async () => {
         try {
             const provider = getInjectedProvider();
             if (!provider) throw new Error("MetaMask (or another wallet) not detected.");
-            // request accounts (v6)
             await provider.send("eth_requestAccounts", []);
             const signer = await provider.getSigner();
             const address = await signer.getAddress();
@@ -147,7 +124,7 @@ const DePINDashboard: React.FC = () => {
             setWallet({
                 isConnected: true,
                 address,
-                chainId: network.chainId.toString(),
+                chainId: String(network.chainId),
                 ethBalance: parseFloat(formatEther(balWei)).toFixed(4),
             });
             showNotification("success", "Wallet connected");
@@ -155,6 +132,7 @@ const DePINDashboard: React.FC = () => {
             showNotification("error", e?.message || "Failed to connect");
         }
     }, []);
+
     const disconnect = useCallback(() => {
         setWallet({ isConnected: false });
         showNotification("success", "Disconnected");
@@ -163,7 +141,6 @@ const DePINDashboard: React.FC = () => {
     // React to wallet/chain changes
     useEffect(() => {
         if (typeof window === "undefined" || !(window as any).ethereum) return;
-
         const ethereum = (window as any).ethereum;
 
         const onAccounts = (accounts: string[]) => {
@@ -173,100 +150,165 @@ const DePINDashboard: React.FC = () => {
                 connect();
             }
         };
-
         const onChain = () => {
             connect();
         };
 
-        // Add event listeners to the raw ethereum provider
         ethereum.on("accountsChanged", onAccounts);
         ethereum.on("chainChanged", onChain);
-
         return () => {
-            // Clean up event listeners
             ethereum.removeListener("accountsChanged", onAccounts);
             ethereum.removeListener("chainChanged", onChain);
         };
     }, [connect]);
 
     // -------- Fetchers --------
-    // Live contract data for overview cards
+    // NOTE: no wallet dependency (silences the ESLint warning)
     const fetchLiveContractData = useCallback(async () => {
         try {
             console.log("🔄 Starting contract data fetch...");
 
-            const provider = getInjectedProvider();
-            if (!provider) throw new Error("No provider");
-
+            const provider = getReadProvider();
             const contracts = getContracts(provider);
 
-            let tvl = "0";
-            let totalRewards = "0";
+            // 1) Pool
+            let tvl = "0.0";
+            let totalRewards = "0.0";
             let totalStakers = 0;
-            let poolDistribution = [0, 0, 0, 0];
-            let totalNodes = 0;
+            let poolDistribution: number[] = [0, 0, 0, 0];
 
-            // 1) Get staking pool data
             try {
                 const globalStats = await contracts.stakingPool.getGlobalStats();
                 tvl = formatEther(globalStats[0]);
                 totalRewards = formatEther(globalStats[1]);
                 totalStakers = Number(globalStats[2]);
-                poolDistribution = (globalStats[3] as any[]).map((n) => fromWei(n));
+                poolDistribution = (globalStats[3] as any[]).map((n) => {
+                    try {
+                        return parseFloat(formatEther(n));
+                    } catch {
+                        return 0;
+                    }
+                });
                 console.log("✅ Staking pool data loaded:", { tvl, totalRewards, totalStakers });
             } catch (err: any) {
                 console.error("❌ Failed to get staking pool data:", err?.message || err);
             }
 
-            await delay(500);
+            await delay(300);
 
-            // 2) Get NFT supply (total nodes)
+            // 2) Total nodes: prefer Participation.nextId(), fallback to NFT.totalSupply()
+            let totalNodes = 0;
             try {
-                totalNodes = Number(await contracts.nodeRightsNFT.totalSupply());
-                console.log("✅ NFT total supply loaded:", totalNodes);
+                const nextIdRaw = await contracts.participation.nextId().catch(() => null as any);
+                const nftSupplyRaw = await contracts.nodeRightsNFT.totalSupply().catch(() => null as any);
+
+                const toNum = (x: any) => {
+                    try {
+                        if (x == null) return 0;
+                        if (typeof x === "string" || typeof x === "number") return Number(x);
+                        if (typeof x?.toString === "function") return Number(x.toString());
+                    } catch {}
+                    return 0;
+                };
+
+                const nextIdNum = toNum(nextIdRaw);
+                const nftSupplyNum = toNum(nftSupplyRaw);
+                totalNodes = nextIdNum > 0 ? nextIdNum : nftSupplyNum;
+
+                console.log("✅ Node counts:", {
+                    byRegistryNextId: String(nextIdNum),
+                    byNftTotalSupply: String(nftSupplyNum),
+                    totalNodes,
+                });
             } catch (err: any) {
-                console.error("❌ Failed to get NFT totalSupply:", err?.message || err);
+                console.error("❌ Failed to get total nodes:", err?.message || err);
             }
 
-            await delay(500);
+            await delay(300);
 
-            // 3) Get node type stats (this DOES exist in your contract)
+            // 3) Per-type stats via NFT (may be zero depending on your flow)
             const nodeTypeStats: NodeTypeStats = {
                 storage: { total: 0, active: 0, staked: "0" },
                 compute: { total: 0, active: 0, staked: "0" },
                 bandwidth: { total: 0, active: 0, staked: "0" },
             };
 
-            try {
-                const asKey = (i: number): NodeTypeKey => (i === 0 ? "storage" : i === 1 ? "compute" : "bandwidth");
-
-                for (let i = 0; i < 3; i++) {
-                    try {
-                        const stats = await contracts.nodeRightsNFT.getNodeTypeStats(i);
-                        const key = asKey(i);
-
-                        nodeTypeStats[key] = {
-                            total: Number(stats[0]),
-                            active: Number(stats[3]),
-                            staked: formatEther(stats[1])
-                        };
-
-                        console.log(`✅ Node type ${key} stats:`, nodeTypeStats[key]);
-                    } catch (typeErr: any) {
-                        console.warn(`⚠️ Failed to get stats for node type ${i}:`, typeErr?.message || typeErr);
+            if (Date.now() >= statsBackoffUntil.current) {
+                try {
+                    const asKey = (i: number): NodeTypeKey => (i === 0 ? "storage" : i === 1 ? "compute" : "bandwidth");
+                    for (let i = 0; i < 3; i++) {
+                        try {
+                            const stats = await contracts.nodeRightsNFT.getNodeTypeStats(i);
+                            const key = asKey(i);
+                            nodeTypeStats[key] = {
+                                total: Number(stats[0]),
+                                active: Number(stats[3]),
+                                staked: formatEther(stats[1]),
+                            };
+                            console.log(`✅ Node type ${key} stats:`, nodeTypeStats[key]);
+                        } catch (typeErr: any) {
+                            console.warn(`⚠️ Failed to get stats for node type ${i}:`, typeErr?.message || typeErr);
+                        }
                     }
+                } catch (err: any) {
+                    console.error("❌ Node type stats failed:", err?.message || err);
+                    statsBackoffUntil.current = Date.now() + STATS_BACKOFF_MS;
                 }
-            } catch (err: any) {
-                console.error("❌ Node type stats failed:", err?.message || err);
-                // Use fallback distribution
-                const perType = Math.floor(totalNodes / 3);
-                const stakePerType = totalNodes > 0 ? (parseFloat(tvl) / 3).toFixed(2) : "0";
-                nodeTypeStats.storage = { total: perType, active: perType, staked: stakePerType };
-                nodeTypeStats.compute = { total: perType, active: perType, staked: stakePerType };
-                nodeTypeStats.bandwidth = { total: totalNodes - (perType * 2), active: totalNodes - (perType * 2), staked: stakePerType };
+            } else {
+                console.warn("⏳ Skipping getNodeTypeStats during backoff");
             }
 
-            // 4) UPDATE STATE - This was missing in your version
+            // If NFT totals are zero but we know nodes exist, derive counts from registry metadata
+            const currentTotals =
+                nodeTypeStats.storage.total + nodeTypeStats.compute.total + nodeTypeStats.bandwidth.total;
+
+            if (currentTotals === 0 && totalNodes > 0) {
+                try {
+                    const nextIdRaw2 = await contracts.participation.nextId().catch(() => 0 as any);
+                    const cap = (typeof nextIdRaw2?.toString === "function" ? Number(nextIdRaw2.toString()) : Number(nextIdRaw2)) || 0;
+                    if (cap > 0) {
+                        let storage = 0,
+                            compute = 0,
+                            bandwidth = 0;
+
+                        for (let id = 0; id < cap; id++) {
+                            try {
+                                const rec = await contracts.participation.nodes(id);
+                                const metadata: string = rec[1] ?? "";
+                                let t = "";
+                                try {
+                                    t = (JSON.parse(metadata).type || "").toString().toLowerCase();
+                                } catch {}
+                                if (t.startsWith("stor")) storage++;
+                                else if (t.startsWith("comp")) compute++;
+                                else if (t.startsWith("band")) bandwidth++;
+                                else storage++;
+                            } catch {
+                                // skip row
+                            }
+                        }
+
+                        nodeTypeStats.storage.total = storage;
+                        nodeTypeStats.compute.total = compute;
+                        nodeTypeStats.bandwidth.total = bandwidth;
+                        nodeTypeStats.storage.active = storage;
+                        nodeTypeStats.compute.active = compute;
+                        nodeTypeStats.bandwidth.active = bandwidth;
+
+                        const tvlNum = parseFloat(tvl || "0");
+                        const denom = Math.max(storage + compute + bandwidth, 1);
+                        nodeTypeStats.storage.staked = (tvlNum * (storage / denom)).toFixed(2);
+                        nodeTypeStats.compute.staked = (tvlNum * (compute / denom)).toFixed(2);
+                        nodeTypeStats.bandwidth.staked = (tvlNum * (bandwidth / denom)).toFixed(2);
+
+                        console.log("ℹ️ Derived nodeTypeStats from registry metadata.");
+                    }
+                } catch (err: any) {
+                    console.warn("⚠️ Registry scan failed:", err?.message || err);
+                }
+            }
+
+            // 4) Update state
             setLiveData((prev) => ({
                 ...prev,
                 totalNodes,
@@ -284,14 +326,11 @@ const DePINDashboard: React.FC = () => {
                 poolDistribution,
                 nodeTypeStats,
             });
-
         } catch (error: any) {
             console.error("❌ Critical error in fetchLiveContractData:", error);
-            showNotification("error", "Failed to load contract data. Check console.");
         }
-    }, []);
+    }, []); // <- no wallet dep
 
-    // User-specific data (placeholder wiring)
     const fetchUserContractData = useCallback(async () => {
         try {
             if (!wallet.isConnected || !wallet.address) {
@@ -299,7 +338,7 @@ const DePINDashboard: React.FC = () => {
                     ...prev,
                     stakingPositions: 0,
                     userTotalStaked: 0,
-                    userTotalRewards: 0
+                    userTotalRewards: 0,
                 }));
                 return;
             }
@@ -309,36 +348,31 @@ const DePINDashboard: React.FC = () => {
 
             const contracts = getContracts(provider);
 
-            // Get user's NFT count as totalSupply for demo
             let totalSupply = "0";
             try {
                 const supply = await contracts.nodeRightsNFT.totalSupply();
-                totalSupply = supply.toString();
+                totalSupply = String(typeof supply?.toString === "function" ? supply.toString() : supply);
             } catch (err) {
                 console.error("Failed to get totalSupply:", err);
             }
 
-            // Demo values - replace with actual contract calls when ready
             const stakingPositions = totalSupply !== "0" ? 1 : 0;
             const userTotalStaked = stakingPositions > 0 ? 1.0 : 0;
             const userTotalRewards = stakingPositions > 0 ? 0.0001 : 0;
 
             setUserContractData({
-                dpnBalance: "1000000", // placeholder for demo
+                dpnBalance: "1000000", // demo
                 stakingPositions,
                 totalSupply,
                 userTotalStaked,
                 userTotalRewards,
             });
-
         } catch (e) {
             console.error("fetchUserContractData error:", e);
         }
     }, [wallet.isConnected, wallet.address]);
 
-    // Subgraph data (placeholder message)
     const fetchSubgraphData = useCallback(async () => {
-        // wire this later to your The Graph endpoint
         return;
     }, []);
 
@@ -359,7 +393,6 @@ const DePINDashboard: React.FC = () => {
         try {
             console.log("Starting node registration...");
 
-            // Validate wallet connection first
             if (!wallet.isConnected) {
                 showNotification("error", "Please connect your wallet first");
                 return;
@@ -369,12 +402,11 @@ const DePINDashboard: React.FC = () => {
             let obj: any = {};
             try {
                 obj = JSON.parse(metadata || "{}");
-            } catch (e) {
+            } catch {
                 showNotification("error", "Invalid JSON format");
                 return;
             }
 
-            // Ensure known keys
             const normalized = {
                 type: String(obj.type ?? "storage"),
                 location: String(obj.location ?? "Unknown"),
@@ -387,11 +419,38 @@ const DePINDashboard: React.FC = () => {
             const json = JSON.stringify(normalized);
             console.log("Normalized metadata:", json);
 
-            const provider = getInjectedProvider();
-            if (!provider) throw new Error("No Web3 provider found");
+            const injected = getInjectedProvider();
+            if (!injected) throw new Error("No Web3 provider found");
 
-            const signer = await provider.getSigner();
+            // Ensure expected chain (avoid BigInt usage)
+            const net = await injected.getNetwork();
+            const expected = String(process.env.REACT_APP_CHAIN_ID ?? "31337");
+            const netId = (net as any)?.chainId?.toString ? (net as any).chainId.toString() : String(net.chainId);
+            if (netId !== expected) {
+                const hex = "0x" + Number(expected).toString(16);
+                try {
+                    await (window as any).ethereum.request({
+                        method: "wallet_switchEthereumChain",
+                        params: [{ chainId: hex }],
+                    });
+                } catch (e) {
+                    showNotification("error", `Wrong network (${netId}). Please switch to ${expected} and try again.`);
+                    return;
+                }
+            }
+
+            const signer = await injected.getSigner();
             const contracts = getContracts(signer);
+            const from = await signer.getAddress();
+
+            // Optional preflight; ignore failure
+            try {
+                if ((contracts.participation as any)?.registerNode?.staticCall) {
+                    await (contracts.participation as any).registerNode.staticCall(json, { from });
+                }
+            } catch (preErr) {
+                console.warn("Preflight/staticCall failed (will still prompt):", preErr);
+            }
 
             console.log("Submitting transaction...");
             showNotification("success", "Submitting registration transaction...");
@@ -400,50 +459,41 @@ const DePINDashboard: React.FC = () => {
             console.log("Transaction submitted:", tx.hash);
             showNotification("success", `Transaction submitted: ${tx.hash.slice(0, 10)}...`);
 
-            // Wait for confirmation
             const receipt = await tx.wait();
             console.log("Transaction confirmed:", receipt);
 
             showNotification("success", "Node registered successfully!");
             setRegisterModal({ isOpen: false, metadata: "" });
 
-            // Refresh data after successful registration
             setTimeout(() => {
                 fetchLiveContractData();
-            }, 2000);
-
+            }, 1500);
         } catch (error: any) {
             console.error("Registration error:", error);
 
-            // Parse common error messages
             let userMessage = "Failed to register node";
-            if (error.message.includes("user rejected")) {
+            const msg = String(error?.message ?? "");
+            if (msg.includes("user rejected") || error?.code === 4001) {
                 userMessage = "Transaction was rejected by user";
-            } else if (error.message.includes("insufficient funds")) {
+            } else if (msg.includes("insufficient funds")) {
                 userMessage = "Insufficient funds for transaction";
-            } else if (error.message.includes("execution reverted")) {
+            } else if (msg.includes("execution reverted")) {
                 userMessage = "Transaction failed - check contract requirements";
-            } else if (error.code === 4001) {
-                userMessage = "Transaction was rejected by user";
             }
-
             showNotification("error", userMessage);
         }
     }
 
     async function stakeToPool(tier: number, lockPeriod: number, amountEth: string) {
-        // Wire this to your actual StakingPool deposit when ready
         showNotification("success", `Pretend-staked ${amountEth || "0"} ETH to Tier ${tier}, Lock ${lockPeriod}`);
     }
 
     async function claimAllRewards() {
-        // Wire this to your actual claim function when ready
         showNotification("success", "Pretend-claimed rewards 🎁");
     }
 
     // Chart Data
     const chartData = useMemo(() => {
-        // Fake 24h cumulative curve for now
         const pts = Array.from({ length: 25 }, (_, i) => ({
             time: `${(i * 24) / 24}:00`.padStart(5, "0"),
             cumulative: Math.max(0, i - 1),
@@ -535,21 +585,12 @@ const DePINDashboard: React.FC = () => {
             </div>
 
             {/* Live indicator */}
-            <div
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 14,
-                    color: "#28a745",
-                    fontWeight: 600,
-                }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, color: "#28a745", fontWeight: 600 }}>
                 <span style={{ width: 8, height: 8, background: "#28a745", borderRadius: "50%" }} />
                 🟢 Live
             </div>
 
-            {/* Live Contract Data Cards */}
+            {/* Portfolio (when connected & has positions) */}
             {wallet.isConnected && userContractData.stakingPositions > 0 && (
                 <div
                     style={{
@@ -562,13 +603,7 @@ const DePINDashboard: React.FC = () => {
                     }}
                 >
                     <h3 style={{ margin: "0 0 15px 0", color: "#155724" }}>📊 Your Live Portfolio</h3>
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                            gap: "20px",
-                        }}
-                    >
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
                         <div style={{ textAlign: "center" }}>
                             <div style={{ fontSize: "2rem", fontWeight: "bold", color: "#155724" }}>
                                 {userContractData.stakingPositions}
@@ -591,7 +626,7 @@ const DePINDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* Action Buttons (when connected) */}
+            {/* Actions */}
             {wallet.isConnected && (
                 <div
                     style={{
@@ -651,7 +686,6 @@ const DePINDashboard: React.FC = () => {
                         </button>
                         <button
                             onClick={() => {
-                                // Force refresh all data
                                 setLiveData({
                                     totalNodes: 0,
                                     totalStaked: "0",
@@ -693,40 +727,15 @@ const DePINDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* Main Overview Cards */}
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-                    gap: "20px",
-                    marginBottom: "30px",
-                }}
-            >
-                <div
-                    style={{
-                        backgroundColor: "white",
-                        borderRadius: "10px",
-                        padding: "25px",
-                        textAlign: "center",
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                    }}
-                >
+            {/* Summary Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px", marginBottom: "30px" }}>
+                <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "25px", textAlign: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
                     <div style={{ color: "#666", fontSize: "0.9rem", fontWeight: "bold" }}>TOTAL NODES</div>
-                    <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#007bff" }}>
-                        {liveData.totalNodes.toLocaleString()}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "#28a745", marginTop: "5px" }}>Live from NFT Contract</div>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#007bff" }}>{liveData.totalNodes.toLocaleString()}</div>
+                    <div style={{ fontSize: "0.8rem", color: "#28a745", marginTop: "5px" }}>Live from Registry/NFT</div>
                 </div>
 
-                <div
-                    style={{
-                        backgroundColor: "white",
-                        borderRadius: "10px",
-                        padding: "25px",
-                        textAlign: "center",
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                    }}
-                >
+                <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "25px", textAlign: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
                     <div style={{ color: "#666", fontSize: "0.9rem", fontWeight: "bold" }}>TOTAL STAKED (TVL)</div>
                     <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#28a745" }}>
                         {parseFloat(liveData.totalStaked).toFixed(2)} ETH
@@ -734,15 +743,7 @@ const DePINDashboard: React.FC = () => {
                     <div style={{ fontSize: "0.8rem", color: "#6c757d", marginTop: "5px" }}>From StakingPool.getGlobalStats()</div>
                 </div>
 
-                <div
-                    style={{
-                        backgroundColor: "white",
-                        borderRadius: "10px",
-                        padding: "25px",
-                        textAlign: "center",
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                    }}
-                >
+                <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "25px", textAlign: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
                     <div style={{ color: "#666", fontSize: "0.9rem", fontWeight: "bold" }}>TOTAL REWARDS</div>
                     <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#6f42c1" }}>
                         {parseFloat(liveData.totalRewards).toFixed(2)} DPN
@@ -750,15 +751,7 @@ const DePINDashboard: React.FC = () => {
                     <div style={{ fontSize: "0.8rem", color: "#6c757d", marginTop: "5px" }}>From StakingPool.getGlobalStats()</div>
                 </div>
 
-                <div
-                    style={{
-                        backgroundColor: "white",
-                        borderRadius: "10px",
-                        padding: "25px",
-                        textAlign: "center",
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                    }}
-                >
+                <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "25px", textAlign: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
                     <div style={{ color: "#666", fontSize: "0.9rem", fontWeight: "bold" }}>ACTIVE NETWORK UPTIME</div>
                     <div style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#17a2b8" }}>
                         {liveData.networkUptime.toLocaleString()} min
@@ -768,23 +761,9 @@ const DePINDashboard: React.FC = () => {
             </div>
 
             {/* Charts */}
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "20px",
-                    marginBottom: "30px",
-                }}
-            >
-                {/* Cumulative Rewards Line */}
-                <div
-                    style={{
-                        backgroundColor: "white",
-                        borderRadius: "10px",
-                        padding: "20px",
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                    }}
-                >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "30px" }}>
+                {/* Cumulative Rewards */}
+                <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "20px", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
                     <h3 style={{ margin: "0 0 10px 0", color: "#333" }}>Cumulative Rewards</h3>
                     <div style={{ width: "100%", height: 260 }}>
                         <ResponsiveContainer>
@@ -799,36 +778,13 @@ const DePINDashboard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Pool Distribution Pie */}
-                <div
-                    style={{
-                        backgroundColor: "white",
-                        borderRadius: "10px",
-                        padding: "20px",
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                    }}
-                >
+                {/* Pool Distribution */}
+                <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "20px", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
                     <h3 style={{ margin: "0 0 10px 0", color: "#333" }}>Pool Distribution</h3>
-                    <div
-                        style={{
-                            width: "100%",
-                            height: 260,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                        }}
-                    >
+                    <div style={{ width: "100%", height: 260, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <ResponsiveContainer>
                             <PieChart>
-                                <Pie
-                                    data={chartData.poolDistributionData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={80}
-                                    label
-                                >
+                                <Pie data={chartData.poolDistributionData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
                                     {chartData.poolDistributionData.map((entry: any, index: number) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
@@ -841,15 +797,7 @@ const DePINDashboard: React.FC = () => {
             </div>
 
             {/* Node Type Stats */}
-            <div
-                style={{
-                    backgroundColor: "white",
-                    borderRadius: "10px",
-                    padding: "20px",
-                    boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                    marginBottom: "30px",
-                }}
-            >
+            <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "20px", boxShadow: "0 2px 10px rgba(0,0,0,0.1)", marginBottom: "30px" }}>
                 <h3 style={{ margin: "0 0 10px 0", color: "#333" }}>Node Infrastructure Overview</h3>
                 <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -875,7 +823,6 @@ const DePINDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Modals */}
             {/* Register Node Modal */}
             {registerModal.isOpen && (
                 <div
@@ -988,9 +935,7 @@ const DePINDashboard: React.FC = () => {
                                 <span style={{ fontSize: 12, color: "#666" }}>Lock Period</span>
                                 <select
                                     value={poolStakeModal.lockPeriod}
-                                    onChange={(e) =>
-                                        setPoolStakeModal({ ...poolStakeModal, lockPeriod: parseInt(e.target.value, 10) })
-                                    }
+                                    onChange={(e) => setPoolStakeModal({ ...poolStakeModal, lockPeriod: parseInt(e.target.value, 10) })}
                                     style={{ padding: "10px", borderRadius: 8, border: "1px solid #ced4da" }}
                                 >
                                     <option value={0}>None</option>
@@ -1049,7 +994,7 @@ const DePINDashboard: React.FC = () => {
     );
 };
 
-// Simple display helper for user total staked
+// Simple display helper
 function userTotalStakedDisplay(v: number) {
     try {
         if (!isFinite(v)) return "0.0000";
